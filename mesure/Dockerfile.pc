@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# Millésime — image du test de mesure pour le PC (multi-stage)
+#   InsightFace (onnxruntime) + MiVOLO v2 (PyTorch, processeur).
+#   La vision locale passe par Ollama, installé à part sur le PC.
+#
+# Aucun modèle dans l'image : téléchargés au premier lancement dans /data/models
+# (InsightFace depuis GitHub, MiVOLO depuis Hugging Face).
+# =============================================================================
+
+FROM python:3.12-slim AS builder
+ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+ARG MIVOLO_COMMIT=37475e3f8818b5f22448003feec3e64b01bfb188
+RUN python -m venv /venv
+COPY requirements.txt requirements-pc.txt ./
+RUN /venv/bin/pip install -r requirements-pc.txt \
+ && /venv/bin/pip install --no-deps \
+      "https://github.com/WildChlamydia/MiVOLO/archive/${MIVOLO_COMMIT}.tar.gz"
+
+FROM python:3.12-slim
+ARG VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/baloodusudouest/Millesime" \
+      org.opencontainers.image.description="Millésime — test de mesure sur PC (InsightFace, MiVOLO v2, vision locale via Ollama)" \
+      org.opencontainers.image.version="${VERSION}"
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/venv/bin:$PATH" \
+    DATA_DIR=/data \
+    HF_HOME=/data/models/hf \
+    MIVOLO=1 \
+    THREADS=auto
+COPY --from=builder /venv /venv
+WORKDIR /app
+COPY mesure.py /app/mesure.py
+RUN mkdir -p /data
+VOLUME ["/data"]
+CMD ["python", "/app/mesure.py"]
