@@ -166,3 +166,17 @@ GitHub Actions : build `linux/amd64`, test de l'inférence dans un conteneur QEM
 **Recommandation du président** : V1 = écran de comparaison (visage + frise + bornes dures + fourchette par lot + indices du tirage) ; modèle ONNX seulement en indice affiché si l'erreur médiane est < ±3 ans après correction globale ; une date validée n'est jamais une référence pour le biais ; rien n'est écrit tant que le déplacement de fichiers n'est pas tranché.
 
 **Suite décidée** : test de mesure d'abord (dossier `millesime-test`) — conteneur ponctuel Portainer sur le DS1520+, jeu de test = scans `Numérisation/AAAA-MM` (date du tampon), comparaison avec les photos numériques des mêmes personnes, test d'écriture sur une seule photo `Non datée` restaurée, clé API admin dédiée. Le rapport du test décidera du rôle du modèle et de la v2 de ce document.
+
+## 13. Résultat du test de mesure n°1 (10/11/2026, NAS)
+
+- **Matériel** : Celeron J4125 sans AVX ; onnxruntime 1.20.1 fonctionne, à 0,15 s par visage.
+- **Immich 3.4.0** : le modèle de stockage est actif (`Pellicule/{{y}}/{{album}}/…`), donc **changer la date déplace le fichier**. C'est accepté : le scan rejoint `Pellicule/<année>/<album>/`.
+- **Données** : 300 scans datés par leur tampon, dont 137 seulement ont un visage exploitable. 267 visages ne sont pas nommés. 196 visages appartiennent à 54 personnes sans date de naissance, presque toutes sans nom. 3 visages tombent avant la naissance de la personne à qui ils sont attribués.
+- **InsightFace (genderage.onnx)** : erreur médiane de **14,0 ans** sur l'année de la photo. Il vieillit les enfants de 19 ans et rajeunit les plus de 51 ans. La correction apprise sur le numérique aggrave l'erreur (19,8 ans) ; calibré sur les scans eux-mêmes, il descend à 7,4 ans, ce qui reste optimiste. Ce modèle est donc écarté. Un banc d'essai publié en 2026 le classe d'ailleurs parmi les moins bons, avec 11,7 ans d'erreur moyenne même sur des photos modernes.
+
+## 14. Décisions après le test n°1
+
+- **2ᵉ test de mesure sur le PC de Julien** : MiVOLO v2 (visage seul, puis visage + buste estimé) et un modèle de vision local, Qwen3-VL via Ollama, qui date la photo entière. Le calcul tourne sur le PC, avec Docker Desktop. L'appli devra elle aussi proposer de **déporter les calculs sur le PC**.
+- **Album après validation** : « AAAA Numérisation », en retirant la photo de « Non datées Numérisation », avec un tag qui signale une estimation calculée.
+- **Étape « Nommer » dans Millésime** : les groupes de visages des scans sont classés par fréquence, puis nommés ou fusionnés dans Immich depuis l'appli. Les dates de naissance restent gérées par carnet.
+- **Ordre** : test n°2, puis conception v2, puis conseil, puis code.
