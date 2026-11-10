@@ -1,0 +1,37 @@
+# =============================================================================
+# Millésime — test de mesure n°2, à lancer sur le PC avec Docker Desktop
+#
+#   1. ollama pull qwen3-vl:8b
+#   2. copier .env.exemple en .env et y mettre la clé API Immich
+#   3. docker compose up
+#
+# Résultats : .\data\resultats\rapport.md (à côté de ce fichier)
+# Le test est en lecture seule : rien n'est écrit dans Immich.
+# =============================================================================
+
+services:
+  millesime-mesure-pc:
+    image: ghcr.io/baloodusudouest/millesime:mesure-pc
+    container_name: millesime_mesure_pc
+    env_file: .env
+    environment:
+      - TZ=Europe/Paris
+      - IMMICH_URL=${IMMICH_URL:-http://192.168.1.10:2283}
+      - IMMICH_API_KEY=${IMMICH_API_KEY}
+      - TAG_PREFIXE=Numérisation
+      - TAG_NON_DATEE=Non datée
+      - MAX_SCANS=${MAX_SCANS:-300}
+      - REFS_PAR_PERSONNE=15
+      - INSIGHTFACE=1                         # référence du 1er test
+      - MIVOLO=1                              # MiVOLO v2, visage seul
+      - MIVOLO_CORPS=1                        # MiVOLO v2, visage + buste estimé
+      - VLM_URL=http://host.docker.internal:11434   # Ollama du PC
+      - VLM_MODELE=${VLM_MODELE:-qwen3-vl:8b}
+      - MAX_PHOTOS_VLM=${MAX_PHOTOS_VLM:-150}
+      - THREADS=${THREADS:-auto}              # auto = tous les cœurs du PC
+      - MILLESIME_TEST_FORCER=${MILLESIME_TEST_FORCER:-0}
+    volumes:
+      - ./data:/data                          # modèles (cache) + resultats\
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"

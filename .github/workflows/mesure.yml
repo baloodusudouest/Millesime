@@ -1,7 +1,9 @@
 name: mesure
 
-# Tests du test de mesure, puis publication de l'image
-# ghcr.io/baloodusudouest/millesime:mesure (et mesure-<version>, mesure-sha-<commit>).
+# Tests du test de mesure, puis publication de deux images :
+#   ghcr.io/baloodusudouest/millesime:mesure     (NAS, léger : InsightFace)
+#   ghcr.io/baloodusudouest/millesime:mesure-pc  (PC : InsightFace + MiVOLO v2, vision locale via Ollama)
+# chacune aussi en <tag>-<version> et <tag>-sha-<commit>.
 # Le tag « latest » reste réservé à la future appli.
 
 on:
@@ -10,6 +12,7 @@ on:
     paths:
       - "mesure/**"
       - "tests/**"
+      - "pc/**"
       - "requirements-dev.txt"
       - ".github/workflows/mesure.yml"
   workflow_dispatch:
@@ -26,13 +29,36 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Cache du modèle d'âge
+      - name: Cache du modèle InsightFace
         uses: actions/cache@v4
         with:
           path: ~/.cache/millesime
           key: modele-genderage-buffalo_l-v0.7
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
+
+  tests-pc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache des modèles (InsightFace, MiVOLO)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/millesime
+            ~/.cache/huggingface
+          key: modeles-pc-v1
+      - name: Dépendances de l'image PC
+        run: |
+          pip install -r mesure/requirements-pc.txt pytest==8.3.4
+          pip install --no-deps "https://github.com/WildChlamydia/MiVOLO/archive/37475e3f8818b5f22448003feec3e64b01bfb188.tar.gz"
+      - name: Tests avec MiVOLO réel
+        env:
+          MILLESIME_TEST_MIVOLO: "1"
+        run: python -m pytest -q -rs
 
   image:
     needs: tests
@@ -64,3 +90,37 @@ jobs:
         run: |
           docker run --rm --entrypoint python ghcr.io/baloodusudouest/millesime:mesure-sha-${{ github.sha }} \
             -c "import onnxruntime, numpy, PIL, requests; print('onnxruntime', onnxruntime.__version__)"
+
+  image-pc:
+    needs: [tests, tests-pc]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: echo "version=$(grep -oP '__version__ = \"\K[^\"]+' mesure/mesure.py)" >> "$GITHUB_OUTPUT"
+      - name: Place disque
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: mesure
+          file: mesure/Dockerfile.pc
+          push: true
+          platforms: linux/amd64
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          tags: |
+            ghcr.io/baloodusudouest/millesime:mesure-pc
+            ghcr.io/baloodusudouest/millesime:mesure-pc-${{ steps.v.outputs.version }}
+            ghcr.io/baloodusudouest/millesime:mesure-pc-sha-${{ github.sha }}
+          cache-from: type=gha,scope=mesure-pc
+          cache-to: type=gha,mode=max,scope=mesure-pc
+      - name: Contrôle de l'image publiée
+        run: |
+          docker run --rm --entrypoint python ghcr.io/baloodusudouest/millesime:mesure-pc-sha-${{ github.sha }} \
+            -c "import torch, transformers, timm, mivolo, onnxruntime; print('torch', torch.__version__, '| transformers', transformers.__version__)"

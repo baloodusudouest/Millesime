@@ -1,0 +1,12 @@
+# Image « mesure-pc » : InsightFace + MiVOLO v2 (PyTorch sur processeur).
+# MiVOLO lui-même est installé à part, sans ses dépendances (voir Dockerfile.pc).
+--extra-index-url https://download.pytorch.org/whl/cpu
+-r requirements.txt
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+transformers==4.51.0
+accelerate==1.8.1
+huggingface_hub==0.30.2
+timm==0.8.13.dev0
+opencv-python-headless==4.10.0.84
+scipy==1.14.1
