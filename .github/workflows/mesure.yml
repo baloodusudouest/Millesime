@@ -1,0 +1,66 @@
+name: mesure
+
+# Tests du test de mesure, puis publication de l'image
+# ghcr.io/baloodusudouest/millesime:mesure (et mesure-<version>, mesure-sha-<commit>).
+# Le tag « latest » reste réservé à la future appli.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mesure/**"
+      - "tests/**"
+      - "requirements-dev.txt"
+      - ".github/workflows/mesure.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache du modèle d'âge
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/millesime
+          key: modele-genderage-buffalo_l-v0.7
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  image:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: echo "version=$(grep -oP '__version__ = \"\K[^\"]+' mesure/mesure.py)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: mesure
+          push: true
+          platforms: linux/amd64
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          tags: |
+            ghcr.io/baloodusudouest/millesime:mesure
+            ghcr.io/baloodusudouest/millesime:mesure-${{ steps.v.outputs.version }}
+            ghcr.io/baloodusudouest/millesime:mesure-sha-${{ github.sha }}
+          cache-from: type=gha,scope=mesure
+          cache-to: type=gha,mode=max,scope=mesure
+      - name: Contrôle de l'image publiée
+        run: |
+          docker run --rm --entrypoint python ghcr.io/baloodusudouest/millesime:mesure-sha-${{ github.sha }} \
+            -c "import onnxruntime, numpy, PIL, requests; print('onnxruntime', onnxruntime.__version__)"
