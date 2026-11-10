@@ -54,7 +54,8 @@ jobs:
       - name: Dépendances de l'image PC
         run: |
           pip install -r mesure/requirements-pc.txt pytest==8.3.4
-          pip install --no-deps "https://github.com/WildChlamydia/MiVOLO/archive/37475e3f8818b5f22448003feec3e64b01bfb188.tar.gz"
+          pip install "setuptools<81" wheel
+          pip install --no-deps --no-build-isolation "https://github.com/WildChlamydia/MiVOLO/archive/37475e3f8818b5f22448003feec3e64b01bfb188.tar.gz"
       - name: Tests avec MiVOLO réel
         env:
           MILLESIME_TEST_MIVOLO: "1"

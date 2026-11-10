@@ -10,11 +10,13 @@
 
 FROM python:3.12-slim AS builder
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+# setup.py de MiVOLO utilise pkg_resources, retiré de setuptools 81 : on fige setuptools
 ARG MIVOLO_COMMIT=37475e3f8818b5f22448003feec3e64b01bfb188
 RUN python -m venv /venv
 COPY requirements.txt requirements-pc.txt ./
 RUN /venv/bin/pip install -r requirements-pc.txt \
- && /venv/bin/pip install --no-deps \
+ && /venv/bin/pip install "setuptools<81" wheel \
+ && /venv/bin/pip install --no-deps --no-build-isolation \
       "https://github.com/WildChlamydia/MiVOLO/archive/${MIVOLO_COMMIT}.tar.gz"
 
 FROM python:3.12-slim
