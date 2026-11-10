@@ -67,7 +67,7 @@ MIVOLO_CORPS = os.environ.get("MIVOLO_CORPS", "1") == "1"
 MIVOLO_ID = os.environ.get("MIVOLO_MODELE", "iitolstykh/mivolo_v2")
 
 VLM_URL = os.environ.get("VLM_URL", "").rstrip("/")
-VLM_MODELE = os.environ.get("VLM_MODELE", "qwen3-vl:8b")
+VLM_MODELE = os.environ.get("VLM_MODELE", "qwen3-vl:8b-instruct")
 MAX_PHOTOS_VLM = int(os.environ.get("MAX_PHOTOS_VLM", "150"))
 VLM_TIMEOUT = int(os.environ.get("VLM_TIMEOUT", "600"))
 # Qwen3-VL « réfléchit » avant de répondre : il faut assez de contexte pour la réflexion + l'image + la réponse

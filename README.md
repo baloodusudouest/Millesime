@@ -20,7 +20,7 @@ Ce test est en **lecture seule**, rien n'est écrit dans Immich. Il tourne sur l
 ### Lancer le test (PowerShell)
 
 ```powershell
-ollama pull qwen3-vl:8b
+ollama pull qwen3-vl:8b-instruct
 mkdir C:\millesime; cd C:\millesime
 curl.exe -L -o compose.yml https://raw.githubusercontent.com/baloodusudouest/Millesime/main/pc/compose.yml
 curl.exe -L -o .env https://raw.githubusercontent.com/baloodusudouest/Millesime/main/pc/.env.exemple
@@ -97,7 +97,7 @@ Le test ne se relance pas tout seul. Si `resultats/rapport.md` existe, le conten
 | `MIVOLO_CORPS` | `1` | Ajoute la variante visage + buste estimé |
 | `MIVOLO_MODELE` | `iitolstykh/mivolo_v2` | Modèle MiVOLO sur Hugging Face |
 | `VLM_URL` | — | Adresse d'Ollama (vision locale désactivée si vide) |
-| `VLM_MODELE` | `qwen3-vl:8b` | Modèle de vision d'Ollama |
+| `VLM_MODELE` | `qwen3-vl:8b-instruct` | Modèle de vision d'Ollama |
 | `MAX_PHOTOS_VLM` | `150` | Nombre de photos datées par la vision locale |
 | `DATA_DIR` | `/data` | Modèle et résultats |
 
