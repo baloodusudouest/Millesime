@@ -23,7 +23,7 @@ Il ne tourne qu'une fois : si resultats/rapport.md existe, il s'arrête aussitô
 Pour le relancer : MILLESIME_TEST_FORCER=1, ou supprimer rapport.md.
 """
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 import base64
 import csv
@@ -105,8 +105,28 @@ session = requests.Session()
 session.headers.update({"x-api-key": API_KEY, "Accept": "application/json"})
 
 
+ATTENTES = (2, 5, 15, 30)   # secondes entre les tentatives (coupure réseau, Immich occupé)
+
+
+def requete(methode: str, url: str, **kw) -> requests.Response:
+    """Requête Immich avec nouvelles tentatives sur coupure, délai dépassé ou erreur 5xx."""
+    for essai, attente in enumerate((*ATTENTES, None), 1):
+        try:
+            r = session.request(methode, url, timeout=60, **kw)
+            if r.status_code < 500 or attente is None:
+                return r
+            motif = f"HTTP {r.status_code}"
+        except (requests.ConnectionError, requests.Timeout) as e:
+            if attente is None:
+                raise
+            motif = e.__class__.__name__
+        log(f"  Immich : {motif}, nouvel essai dans {attente} s ({essai}/{len(ATTENTES)})")
+        time.sleep(attente)
+    raise RuntimeError("inaccessible")  # jamais atteint
+
+
 def api(methode: str, chemin: str, **kw):
-    r = session.request(methode, f"{IMMICH_URL}/api{chemin}", timeout=60, **kw)
+    r = requete(methode, f"{IMMICH_URL}/api{chemin}", **kw)
     r.raise_for_status()
     if not r.content:
         return None
@@ -432,7 +452,7 @@ def tags_numerisation():
 
 
 def apercu(asset_id: str) -> Image.Image:
-    r = session.get(f"{IMMICH_URL}/api/assets/{asset_id}/thumbnail", params={"size": "preview"}, timeout=60)
+    r = requete("GET", f"{IMMICH_URL}/api/assets/{asset_id}/thumbnail", params={"size": "preview"})
     r.raise_for_status()
     return Image.open(BytesIO(r.content)).convert("RGB")
 

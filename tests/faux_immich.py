@@ -58,10 +58,10 @@ def _donnees():
     return personnes, tags, assets, par_tag, par_personne
 
 
-def demarrer(port: int = 0, stockage_actif: bool = False):
+def demarrer(port: int = 0, stockage_actif: bool = False, pannes: int = 0):
     """Lance le faux Immich dans un thread ; renvoie (serveur, url, état)."""
     personnes, tags, assets, par_tag, par_personne = _donnees()
-    etat = {"assets": assets, "jobs": []}
+    etat = {"assets": assets, "jobs": [], "pannes": pannes}
     modele = "{{y}}/{{y}}-{{MM}}/{{filename}}"
 
     class H(BaseHTTPRequestHandler):
@@ -87,6 +87,9 @@ def demarrer(port: int = 0, stockage_actif: bool = False):
             return True
 
         def do_GET(self):
+            if etat["pannes"] > 0:
+                etat["pannes"] -= 1
+                return self._json({"message": "indisponible"}, 503)
             if not self._autorise():
                 return
             chemin = self.path.split("?")[0]

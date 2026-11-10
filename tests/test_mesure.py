@@ -159,6 +159,18 @@ def test_ne_se_relance_pas(tmp_path, modele):
         serveur.shutdown()
 
 
+def test_coupure_immich_reessayee(tmp_path, modele):
+    """Immich répond 503 aux deux premiers appels : le test réessaie et va au bout."""
+    serveur, url, etat = faux_immich.demarrer(pannes=2)
+    try:
+        p = lancer(url, tmp_path, modele, MAX_SCANS="10")
+    finally:
+        serveur.shutdown()
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "nouvel essai dans 2 s (1/4)" in p.stdout
+    assert "Scans datés analysés : 10" in lire_rapport(tmp_path)
+
+
 def test_cle_refusee(tmp_path, modele):
     serveur, url, _ = faux_immich.demarrer()
     try:
