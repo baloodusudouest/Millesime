@@ -1,7 +1,7 @@
 # =============================================================================
 # Millésime — test de mesure n°2, à lancer sur le PC avec Docker Desktop
 #
-#   1. ollama pull qwen3-vl:8b
+#   1. ollama pull qwen3-vl:8b-instruct
 #   2. copier .env.exemple en .env et y mettre la clé API Immich
 #   3. docker compose up
 #
@@ -26,7 +26,7 @@ services:
       - MIVOLO=1                              # MiVOLO v2, visage seul
       - MIVOLO_CORPS=1                        # MiVOLO v2, visage + buste estimé
       - VLM_URL=http://host.docker.internal:11434   # Ollama du PC
-      - VLM_MODELE=${VLM_MODELE:-qwen3-vl:8b}
+      - VLM_MODELE=${VLM_MODELE:-qwen3-vl:8b-instruct}
       - MAX_PHOTOS_VLM=${MAX_PHOTOS_VLM:-150}
       - THREADS=${THREADS:-auto}              # auto = tous les cœurs du PC
       - MILLESIME_TEST_FORCER=${MILLESIME_TEST_FORCER:-0}

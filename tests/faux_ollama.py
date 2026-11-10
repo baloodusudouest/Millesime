@@ -4,7 +4,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-def demarrer(annee: int = 2006, modele: str = "qwen3-vl:8b", reponse_brute: str | None = None):
+def demarrer(annee: int = 2006, modele: str = "qwen3-vl:8b-instruct", reponse_brute: str | None = None):
     etat = {"appels": 0}
 
     class H(BaseHTTPRequestHandler):

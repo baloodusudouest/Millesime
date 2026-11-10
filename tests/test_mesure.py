@@ -143,7 +143,7 @@ def test_modele_vlm_absent(tmp_path, modele):
         serveur.shutdown()
         ollama.shutdown()
     assert p.returncode == 0, p.stdout + p.stderr
-    assert "ollama pull qwen3-vl:8b" in lire_rapport(tmp_path)
+    assert "ollama pull qwen3-vl:8b-instruct" in lire_rapport(tmp_path)
     assert etat_ollama["appels"] == 0
 
 
