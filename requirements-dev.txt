@@ -1,0 +1,2 @@
+-r mesure/requirements.txt
+pytest==8.3.4
