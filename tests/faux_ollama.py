@@ -33,6 +33,9 @@ def demarrer(annee: int = 2006, modele: str = "qwen3-vl:8b", reponse_brute: str 
                 etat["appels"] += 1
                 assert corps["messages"][0]["images"], "image manquante"
                 assert corps["format"]["type"] == "object"
+                assert corps["options"]["num_ctx"] >= 8192
+                if reponse_brute == "":
+                    return self._json({"message": {"role": "assistant", "content": "", "thinking": "x" * 50}})
                 contenu = reponse_brute if reponse_brute is not None else json.dumps(
                     {"annee": annee, "annee_min": annee - 3, "annee_max": annee + 3,
                      "indices": "couleurs du tirage"})

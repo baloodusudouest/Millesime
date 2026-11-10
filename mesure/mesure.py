@@ -23,7 +23,7 @@ Il ne tourne qu'une fois : si resultats/rapport.md existe, il s'arrête aussitô
 Pour le relancer : MILLESIME_TEST_FORCER=1, ou supprimer rapport.md.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 import base64
 import csv
@@ -70,6 +70,9 @@ VLM_URL = os.environ.get("VLM_URL", "").rstrip("/")
 VLM_MODELE = os.environ.get("VLM_MODELE", "qwen3-vl:8b")
 MAX_PHOTOS_VLM = int(os.environ.get("MAX_PHOTOS_VLM", "150"))
 VLM_TIMEOUT = int(os.environ.get("VLM_TIMEOUT", "600"))
+# Qwen3-VL « réfléchit » avant de répondre : il faut assez de contexte pour la réflexion + l'image + la réponse
+VLM_CTX = int(os.environ.get("VLM_CTX", "12288"))
+VLM_MAX_JETONS = int(os.environ.get("VLM_MAX_JETONS", "4096"))
 
 OUT = WORK / "resultats"
 MODELS = WORK / "models"
@@ -364,11 +367,20 @@ def estimer_vlm(image: Image.Image) -> dict:
                       "images": [base64.b64encode(buf.getvalue()).decode()]}],
         "stream": False,
         "format": SCHEMA_VLM,
-        "options": {"temperature": 0},
+        "think": False,
+        "options": {"temperature": 0, "num_ctx": VLM_CTX, "num_predict": VLM_MAX_JETONS},
     }
     r = requests.post(f"{VLM_URL}/api/chat", json=corps, timeout=VLM_TIMEOUT)
+    if r.status_code == 400 and "think" in r.text:
+        corps.pop("think")   # modèle sans mode réflexion : on renvoie sans le paramètre
+        r = requests.post(f"{VLM_URL}/api/chat", json=corps, timeout=VLM_TIMEOUT)
     r.raise_for_status()
-    d = lire_json(r.json().get("message", {}).get("content", ""))
+    message = r.json().get("message", {})
+    contenu = message.get("content", "")
+    if not contenu.strip():
+        raise ValueError(f"réponse vide (réflexion de {len(message.get('thinking') or '')} caractères, "
+                         f"contexte {VLM_CTX} trop petit ?)")
+    d = lire_json(contenu)
     annee = int(d["annee"])
     if not 1880 <= annee <= date.today().year:
         raise ValueError(f"année hors bornes : {annee}")
