@@ -120,6 +120,20 @@ def test_vision_locale_seule_et_reponse_avec_reflexion(tmp_path, modele):
     assert "InsightFace" not in rapport.split("## 2.")[0]
 
 
+def test_vision_locale_reponse_vide(tmp_path, modele):
+    """Réflexion qui remplit le contexte : réponse vide comptée comme échec, le test continue."""
+    serveur, url, _ = faux_immich.demarrer()
+    ollama, url_ollama, _ = faux_ollama.demarrer(reponse_brute="")
+    try:
+        p = lancer(url, tmp_path, modele, VLM_URL=url_ollama, MAX_PHOTOS_VLM="4")
+    finally:
+        serveur.shutdown()
+        ollama.shutdown()
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "0 photos datées sur 4 (4 échec(s))" in lire_rapport(tmp_path)
+    assert "réponse vide (réflexion de 50 caractères" in p.stdout
+
+
 def test_modele_vlm_absent(tmp_path, modele):
     serveur, url, _ = faux_immich.demarrer()
     ollama, url_ollama, etat_ollama = faux_ollama.demarrer(modele="llava:7b")
