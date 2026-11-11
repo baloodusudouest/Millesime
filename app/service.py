@@ -248,6 +248,18 @@ class Millesime:
         s["details"] = json.loads(s["details"] or "{}")
         s["visages"] = self.base.tous("SELECT face_id, person_id, person_nom, naissance, x1, y1, x2, y2, img_w, img_h, "
                                       "age_visage, age_corps FROM visages WHERE asset_id=?", asset_id)
+        s["lien_immich"] = f"{self.cfg.immich_url}/photos/{asset_id}"
+        # groupes sans nom présents sur la photo, avec leur nombre total de visages (pour les nommer sur place)
+        s["a_nommer"] = self.base.tous(f"""
+            SELECT v.person_id, MIN(v.face_id) AS face_id, ? AS asset_id,
+                   (SELECT COUNT(*) FROM visages w WHERE w.person_id = v.person_id) AS visages
+            FROM visages v WHERE v.asset_id=? AND v.person_id IS NOT NULL
+              AND (v.person_nom IS NULL OR v.person_nom = '')
+            GROUP BY v.person_id""", asset_id, asset_id)
+        for g in s["a_nommer"]:
+            g["exemples"] = [{"face_id": g["face_id"], "asset_id": asset_id}]
+            g["lien_immich"] = f"{self.cfg.immich_url}/people/{g['person_id']}"
+        s["sans_personne"] = [v["face_id"] for v in s["visages"] if not v["person_id"]]
         return s
 
     # ------------------------------------------------------------------ écriture

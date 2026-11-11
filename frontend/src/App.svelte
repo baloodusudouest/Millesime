@@ -20,8 +20,14 @@
     { id: 'journal', nom: 'Journal' },
   ]
 
-  let page = $state(location.hash.slice(1) || 'accueil')
-  window.addEventListener('hashchange', () => (page = location.hash.slice(1) || 'accueil'))
+  // #page ou #page/paramètre (ex. #nommer/<id d'un groupe>)
+  const lire = () => {
+    const [p, param] = location.hash.slice(1).split('/')
+    return { page: p || 'accueil', param: param || null }
+  }
+  let route = $state(lire())
+  const page = $derived(route.page)
+  window.addEventListener('hashchange', () => (route = lire()))
 
   api.get('/api/session').then((s) => { session.connecte = s.connecte; session.version = s.version })
     .catch(() => (session.connecte = false))
@@ -53,7 +59,7 @@
   <main class="mx-auto max-w-5xl px-4 pb-28 pt-4 sm:pb-10">
     {#if page === 'dater'}<Dater statut="a_dater" />
     {:else if page === 'trancher'}<Dater statut="a_trancher" />
-    {:else if page === 'nommer'}<Nommer />
+    {:else if page === 'nommer'}<Nommer cible={route.param} />
     {:else if page === 'verifier'}<Verifier />
     {:else if page === 'calcul'}<Calcul />
     {:else if page === 'journal'}<Journal />
