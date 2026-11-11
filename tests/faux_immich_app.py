@@ -138,6 +138,9 @@ def demarrer():
             m = re.fullmatch(r"/api/assets/([^/]+)", chemin)
             if m:
                 return self._json(self._asset_public(E["assets"][m.group(1)]))
+            if chemin == "/api/people":
+                return self._json({"people": list(E["personnes"].values()), "total": len(E["personnes"]),
+                                   "hasNextPage": False})
             m = re.fullmatch(r"/api/people/([^/]+)", chemin)
             if m:
                 return self._json(E["personnes"][m.group(1)])
@@ -159,6 +162,21 @@ def demarrer():
                 suivante = str(p + 1) if p * t < len(ids) else None
                 return self._json({"assets": {"items": [self._asset_public(E["assets"][i]) for i in tranche],
                                               "nextPage": suivante}})
+            m = re.fullmatch(r"/api/people/([^/]+)/merge", self.path)
+            if m:
+                cible = E["personnes"][m.group(1)]
+                for sid in c["ids"]:
+                    for x in E["assets"].values():
+                        for f in x["faces"]:
+                            if (f["person"] or {}).get("id") == sid:
+                                f["person"] = cible
+                    E["personnes"].pop(sid, None)
+                E["ecritures"].append(("fusion", m.group(1), tuple(c["ids"])))
+                return self._json([{"id": i, "success": True} for i in c["ids"]])
+            if self.path == "/api/people":
+                pid = "p-" + uuid.uuid4().hex[:6]
+                E["personnes"][pid] = {"id": pid, "name": c.get("name", ""), "birthDate": None}
+                return self._json(E["personnes"][pid], 201)
             if self.path == "/api/albums":
                 aid = "al-" + uuid.uuid4().hex[:6]
                 E["albums"][aid] = {"id": aid, "albumName": c["albumName"], "assets": set(c.get("assetIds", []))}
@@ -194,6 +212,13 @@ def demarrer():
                 a["exifInfo"]["dateTimeOriginal"] = a["localDateTime"] = c["dateTimeOriginal"]
                 E["ecritures"].append(("date", m.group(1), c["dateTimeOriginal"]))
                 return self._json(self._asset_public(a))
+            m = re.fullmatch(r"/api/faces/([^/]+)", self.path)
+            if m:
+                for x in E["assets"].values():
+                    for f in x["faces"]:
+                        if f["id"] == m.group(1):
+                            f["person"] = E["personnes"][c["id"]]
+                return self._json({"id": c["id"]})
             m = re.fullmatch(r"/api/people/([^/]+)", self.path)
             if m:
                 E["personnes"][m.group(1)]["name"] = c["name"]

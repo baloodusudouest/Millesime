@@ -206,3 +206,15 @@ Julien a choisi la conception v2 complète, avec l'écran Nommer **sans fusion**
 - **journal d'annulation** : date, tag et albums d'origine restaurés.
 
 **Reste à faire côté carnet** : afficher la carte « N visages à analyser, allume le PC » et la liste « Sans anniversaire », à partir de `GET /api/etat`. Millésime expose déjà ces données.
+
+## 13. Version 1.1 (11/11/2026)
+
+À la demande de Julien, l'écran Nommer évolue :
+
+- **Suggestions des noms d'Immich** : les personnes présentes sur des scans d'abord, puis les autres par ordre alphabétique. Un nom qui existe déjà (casse et accents ignorés) est refusé comme nouveau nom, pour éviter un doublon dans Immich.
+- **Rattachement (fusion) annulable** :
+  - un aperçu côte à côte du groupe et de la personne choisie, puis une confirmation ;
+  - avant la fusion, Millésime note **tous** les visages du groupe, y compris hors scans ;
+  - Annuler recrée une personne et lui rend ces visages un par un (`PUT /faces/{id}`) ;
+  - le nommage simple devient lui aussi annulable.
+- **Photo en grand** : un visage touché ouvre la photo entière, avec le visage encadré.

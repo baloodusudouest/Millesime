@@ -168,6 +168,21 @@ def nommer(person_id: str, corps: dict = Body(...)):
     return m().nommer(person_id, str(corps.get("nom", "")))
 
 
+@app.get("/api/nommer/suggestions")
+def suggestions():
+    return m().suggestions()
+
+
+@app.get("/api/nommer/{source_id}/apercu/{cible_id}")
+def apercu_fusion(source_id: str, cible_id: str):
+    return m().apercu_fusion(source_id, cible_id)
+
+
+@app.post("/api/nommer/{source_id}/fusionner")
+def fusionner(source_id: str, corps: dict = Body(...)):
+    return m().fusionner(source_id, str(corps.get("cible", "")))
+
+
 @app.post("/api/nommer/{person_id}/ignorer")
 def ignorer(person_id: str):
     return m().ignorer_groupe(person_id)
@@ -194,6 +209,11 @@ IMG = {"Cache-Control": "private, max-age=86400"}
 @app.get("/api/apercu/{asset_id}")
 def apercu(asset_id: str):
     return Response(m().apercu(asset_id), media_type="image/jpeg", headers=IMG)
+
+
+@app.get("/api/boite/{asset_id}/{face_id}")
+def boite(asset_id: str, face_id: str):
+    return m().boite_visage(asset_id, face_id)
 
 
 @app.get("/api/visage/{asset_id}/{face_id}")
