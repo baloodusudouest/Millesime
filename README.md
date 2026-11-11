@@ -79,17 +79,25 @@ La clé API Immich doit avoir ces permissions :
 
 Le plus simple est de créer une clé dédiée avec toutes les permissions.
 
-### Calculateur sur le PC
+### Calculateur sur le PC (veille)
 
-Dans `C:\millesime`, sur un PC avec Docker Desktop :
+Dans `C:\\millesime`, sur un PC avec Docker Desktop, une seule fois :
 
 ```powershell
 curl.exe -L -o calcul.yml https://raw.githubusercontent.com/baloodusudouest/Millesime/main/pc/calcul.yml
 # Ajouter au fichier .env : MILLESIME_URL=http://192.168.1.10:8098 et MILLESIME_JETON_CALCUL=<même valeur que la stack>
-docker compose -f calcul.yml up
+docker compose -f calcul.yml up -d
 ```
 
-Le calculateur demande les visages en attente à Millésime. Il télécharge les aperçus par Millésime, si bien que la clé Immich reste sur le NAS. Il renvoie ensuite les âges, puis s'arrête.
+Le calculateur tourne ensuite en **veille** tant que Docker Desktop est ouvert, et Docker Desktop le relance à chaque ouverture.
+
+- Toutes les 5 minutes (`VEILLE_MINUTES`), il demande du travail à Millésime et calcule dès qu'un visage attend. MiVOLO n'est chargé qu'au premier visage.
+- Quand la file est vide, Millésime en profite pour relire Immich, au plus toutes les 15 minutes : un visage nommé ou ajouté dans Immich est analysé en moins de 20 minutes environ.
+- Les aperçus passent par Millésime : la clé Immich reste sur le NAS.
+- Arrêter la veille : `docker compose -f calcul.yml down`.
+- Faire une seule passe sans veille : `docker compose -f calcul.yml run --rm -e VEILLE=0 millesime-calcul`.
+
+L'Accueil et l'écran « Calcul sur le PC » indiquent si le PC est en veille. `/api/etat` renvoie `pc_en_veille`, et carnet ne demande d'allumer le PC que s'il ne s'est pas manifesté depuis 12 minutes.
 
 ### API pour les autres applis
 

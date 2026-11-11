@@ -1,23 +1,30 @@
 # =============================================================================
-# Millésime — calculateur à lancer sur le PC (Docker Desktop)
+# Millésime — calculateur sur le PC (Docker Desktop), en veille
 #
-#   Dans C:\millesime : docker compose -f calcul.yml up
-#   Le calculateur analyse les visages en attente, envoie les âges à Millésime
-#   (NAS) puis s'arrête tout seul. Rien n'est écrit dans Immich.
+#   Une seule fois, dans C:\millesime :  docker compose -f calcul.yml up -d
+#
+#   Ensuite il tourne tout seul tant que Docker Desktop est ouvert : il demande du
+#   travail à Millésime (NAS) toutes les 5 minutes et calcule dès qu'un visage attend.
+#   Docker Desktop le relance à chaque ouverture. Rien n'est écrit dans Immich.
+#
+#   Arrêter la veille :  docker compose -f calcul.yml down
+#   Une seule passe sans veille :  docker compose -f calcul.yml run --rm -e VEILLE=0 millesime-calcul
 # =============================================================================
 
 services:
   millesime-calcul:
     image: ghcr.io/baloodusudouest/millesime:calcul
     container_name: millesime_calcul
-    pull_policy: always                       # toujours la dernière version
+    pull_policy: always                       # dernière version à chaque (re)lancement par compose
     command: ["python", "/app/calcul.py"]
     environment:
       - TZ=Europe/Paris
       - MILLESIME_URL=${MILLESIME_URL:-http://192.168.1.10:8098}
       - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
+      - VEILLE=1                              # reste allumé et redemande du travail
+      - VEILLE_MINUTES=${VEILLE_MINUTES:-5}
       - MIVOLO_CORPS=1
       - THREADS=${THREADS:-auto}
     volumes:
       - ./data:/data                          # cache du modèle MiVOLO (téléchargé une fois)
-    restart: "no"
+    restart: unless-stopped                   # relancé à chaque ouverture de Docker Desktop

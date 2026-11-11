@@ -154,6 +154,35 @@ class Millesime:
                  "boite": {"x1": l["x1"], "y1": l["y1"], "x2": l["x2"], "y2": l["y2"],
                            "imageWidth": l["img_w"], "imageHeight": l["img_h"]}} for l in lignes]
 
+    VEILLE_SYNCHRO_MINUTES = 15      # relecture d'Immich déclenchée par le PC en veille, au plus souvent
+    PC_ACTIF_MINUTES = 12            # le PC est « en veille » s'il a demandé du travail récemment
+
+    def signal_pc(self, veille: bool, machine: str = "") -> dict:
+        """Le calculateur vient demander du travail : on le note et, en veille avec une file vide,
+        on relance une synchronisation Immich (en arrière-plan) si la dernière date de plus de 15 min."""
+        self.base.ecrire("pc_vu", {"le": maintenant(), "veille": bool(veille), "machine": machine[:80]})
+        lancee = False
+        t = self.compter_taches()
+        if veille and not (t["calibrage"] + t["a_dater"]):
+            derniere = (self.base.lire("derniere_synchro") or {}).get("le")
+            age = (datetime.now() - datetime.fromisoformat(derniere)).total_seconds() / 60 if derniere else 1e9
+            if age >= self.VEILLE_SYNCHRO_MINUTES and not self.verrou_synchro.locked():
+                def _synchro():
+                    try:
+                        self.synchroniser()
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("Synchronisation demandée par le PC en échec : %s", e)
+                threading.Thread(target=_synchro, daemon=True).start()
+                lancee = True
+        return {"synchro_lancee": lancee}
+
+    def pc_actif(self) -> dict | None:
+        vu = self.base.lire("pc_vu")
+        if not vu:
+            return None
+        minutes = (datetime.now() - datetime.fromisoformat(vu["le"])).total_seconds() / 60
+        return {**vu, "il_y_a_min": round(minutes), "actif": minutes <= self.PC_ACTIF_MINUTES}
+
     def compter_taches(self) -> dict:
         r = self.base.un("""
             SELECT SUM(CASE WHEN s.type='datee' THEN 1 ELSE 0 END) AS datees,
@@ -235,6 +264,7 @@ class Millesime:
                               "suspects": len(est.suspects(self.base, self.cfg.seuil_suspect))},
                 "taches": self.compter_taches(), "calibrage": cal,
                 "derniere_synchro": self.base.lire("derniere_synchro"),
+                "pc": self.pc_actif(),
                 "dernier_calcul": self.base.lire("dernier_calcul")}
 
     def liste(self, statut: str) -> list[dict]:
@@ -583,8 +613,15 @@ class Millesime:
     def etat(self) -> dict:
         a = self.accueil()["compteurs"]
         t = self.compter_taches()
-        return {"a_analyser": t["calibrage"] + t["a_dater"], "scans_a_analyser": a["a_analyser"],
+        pc = self.pc_actif()
+        n = t["calibrage"] + t["a_dater"]
+        en_veille = bool(pc and pc["actif"] and pc.get("veille"))
+        if not n:
+            message = None
+        elif en_veille:
+            message = f"Millésime : {n} visage(s) en cours d'analyse sur le PC"
+        else:
+            message = f"Millésime : {n} visage(s) à analyser — allume le PC et ouvre Docker Desktop"
+        return {"a_analyser": n, "scans_a_analyser": a["a_analyser"], "pc_en_veille": en_veille,
                 "a_dater": a["a_dater"], "a_trancher": a["a_trancher"], "a_nommer": a["a_nommer"],
-                "validees": a["validees"], "sans_naissance": self.sans_naissance(),
-                "message": (f"Millésime : {t['calibrage'] + t['a_dater']} visage(s) à analyser — "
-                            "allume le PC et lance l'analyse") if t["calibrage"] + t["a_dater"] else None}
+                "validees": a["validees"], "sans_naissance": self.sans_naissance(), "message": message}

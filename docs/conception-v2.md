@@ -234,3 +234,13 @@ Julien a choisi la conception v2 complète, avec l'écran Nommer **sans fusion**
 
   Un groupe dont les visages ont tous disparu de la photo n'est plus proposé à nommer.
 - **« Relire la photo dans Immich »** : après avoir nommé ou ajouté un visage dans Immich, Millésime relit aussitôt les visages et les noms de la photo et recalcule la proposition. Les frises concernées sont rafraîchies, et un nouveau visage avec une date de naissance part au calcul sur le PC.
+
+## 16. Version 1.4 (11/11/2026) : calculateur en veille
+
+À la demande de Julien, le calculateur du PC n'a plus besoin d'être lancé à la main :
+
+- **Veille** (`pc/calcul.yml`, `restart: unless-stopped`) : lancé une fois avec `up -d`, il tourne tant que Docker Desktop est ouvert, et Docker Desktop le relance à chaque ouverture. Docker Desktop ne démarre pas avec Windows, comme Julien l'a choisi.
+- **Interrogation de Millésime toutes les 5 minutes** ; calcul dès qu'un visage attend ; MiVOLO chargé au premier visage, puis gardé en mémoire.
+- **File vide** : Millésime relit Immich en arrière-plan, au plus toutes les 15 minutes. Un visage ajouté ou nommé dans Immich est donc analysé en moins de 20 minutes environ, sans rien faire.
+- **Millésime injoignable** : la veille réessaie au cycle suivant, sans s'arrêter.
+- **Suivi** : Millésime note la dernière demande du PC (Accueil, Calcul, `/api/etat.pc_en_veille`). Le message pour carnet devient « en cours d'analyse sur le PC » quand le PC est en veille, et « allume le PC et ouvre Docker Desktop » sinon.

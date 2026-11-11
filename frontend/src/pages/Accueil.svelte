@@ -20,7 +20,7 @@
     { n: a.compteurs.a_dater, texte: 'photos à dater', lien: '#dater', action: 'Dater' },
     { n: a.compteurs.a_trancher, texte: 'photos à trancher', lien: '#trancher', action: 'Trancher' },
     { n: a.compteurs.a_nommer, texte: 'groupes de visages à nommer', lien: '#nommer', action: 'Nommer' },
-    { n: a.taches.calibrage + a.taches.a_dater, texte: 'visages à analyser sur le PC', lien: '#calcul', action: 'Mode d’emploi' },
+    { n: a.taches.calibrage + a.taches.a_dater, texte: a.pc?.actif && a.pc?.veille ? 'visages en cours d’analyse sur le PC' : 'visages à analyser sur le PC', lien: '#calcul', action: a.pc?.actif && a.pc?.veille ? 'Voir' : 'Mode d’emploi' },
     { n: a.compteurs.suspects, texte: 'visages à vérifier dans Immich', lien: '#verifier', action: 'Voir' },
   ] : [])
 </script>
@@ -74,11 +74,17 @@
       <h2 class="font-semibold">Synchronisation avec Immich</h2>
       <p class="secondaire mt-1 text-sm">
         {#if a.derniere_synchro}Dernière : {dateCourte(a.derniere_synchro.le)}, {pluriel(a.derniere_synchro.scans, 'scan')} relus.{:else}Jamais faite.{/if}
-        Elle se refait toute seule chaque heure.
+        Elle se refait toute seule chaque heure, et toutes les 15 min quand le PC est en veille.
       </p>
       <button class="bouton mt-2" onclick={synchroniser} disabled={synchro}>{synchro ? 'Synchronisation…' : 'Synchroniser maintenant'}</button>
     </div>
   </section>
+
+  <p class="mt-6 text-sm {a.pc?.actif ? 'text-or' : 'secondaire'}">
+    {#if a.pc?.actif && a.pc?.veille}PC en veille : il calcule dès qu'un visage attend (dernière demande il y a {a.pc.il_y_a_min} min).
+    {:else if a.pc}PC hors ligne depuis {dateCourte(a.pc.le)} : ouvre Docker Desktop pour relancer la veille.
+    {:else}Calculateur du PC jamais vu : voir <a class="lien" href="#calcul">Calcul sur le PC</a>.{/if}
+  </p>
 
   <section class="mt-8 rounded-lg border border-dashed border-filet p-4">
     <h2 class="font-semibold">Home Assistant</h2>

@@ -16,9 +16,18 @@
   {#if a.dernier_calcul}<p class="secondaire text-sm">Dernier calcul : {dateCourte(a.dernier_calcul.fin || a.dernier_calcul.le)}.</p>{/if}
 {/if}
 
+{#if a?.pc}
+  <p class="mt-3 text-sm {a.pc.actif ? 'text-or' : 'secondaire'}">
+    {#if a.pc.actif && a.pc.veille}Le PC est en veille{a.pc.machine ? ` (${a.pc.machine})` : ''} : dernière demande il y a {a.pc.il_y_a_min} min.
+    {:else}Dernier contact du PC : {dateCourte(a.pc.le)}. Ouvre Docker Desktop pour relancer la veille.{/if}
+  </p>
+{/if}
+
 <p class="secondaire mt-6 max-w-2xl">
-  L'âge des visages est estimé par MiVOLO sur ton PC : le NAS est trop lent pour ce modèle. Le PC vient chercher le
-  travail auprès de Millésime, renvoie les âges, puis s'arrête tout seul. Rien n'est écrit dans Immich pendant le calcul.
+  L'âge des visages est estimé par MiVOLO sur ton PC : le NAS est trop lent pour ce modèle. Tant que Docker Desktop est
+  ouvert, le calculateur demande du travail à Millésime toutes les 5 minutes et calcule dès qu'un visage attend. Quand il
+  n'y a rien à faire, Millésime en profite pour relire Immich (au plus toutes les 15 minutes). Rien n'est écrit dans Immich
+  pendant le calcul.
 </p>
 
 <h2 class="mt-8 font-semibold">Une seule fois</h2>
@@ -28,19 +37,17 @@
     <pre class="surface mt-2 overflow-x-auto p-3 text-sm">MILLESIME_URL={adresse}
 MILLESIME_JETON_CALCUL=…   (la valeur de la stack homelab)</pre>
   </li>
-  <li>Dans un terminal (celui de Docker Desktop convient), télécharger le fichier du calculateur :
+  <li>Dans un terminal (celui de Docker Desktop convient), télécharger le fichier du calculateur et lancer la veille :
     <pre class="surface mt-2 overflow-x-auto p-3 text-sm">cd C:\millesime
-curl.exe -L -o calcul.yml https://raw.githubusercontent.com/baloodusudouest/Millesime/main/pc/calcul.yml</pre>
+curl.exe -L -o calcul.yml https://raw.githubusercontent.com/baloodusudouest/Millesime/main/pc/calcul.yml
+docker compose -f calcul.yml up -d</pre>
   </li>
 </ol>
 
-<h2 class="mt-8 font-semibold">À chaque analyse</h2>
-<ol class="mt-2 list-decimal space-y-2 pl-5">
-  <li>Allumer le PC et ouvrir Docker Desktop (attendre « Engine running »).</li>
-  <li>Lancer :
-    <pre class="surface mt-2 overflow-x-auto p-3 text-sm">cd C:\millesime
-docker compose -f calcul.yml up</pre>
-  </li>
-  <li>Attendre « Terminé » : les propositions sont prêtes dans l'onglet Dater.</li>
-</ol>
-<p class="secondaire mt-6 text-sm">carnet affiche un rappel quand des visages attendent l'analyse.</p>
+<h2 class="mt-8 font-semibold">Ensuite</h2>
+<p class="mt-2">Il suffit d'ouvrir Docker Desktop : la veille reprend toute seule. Dans Docker Desktop, le conteneur
+  <code>millesime_calcul</code> montre ce qu'il fait (onglet Logs).</p>
+<ul class="secondaire mt-2 list-disc space-y-1 pl-5 text-sm">
+  <li>Arrêter la veille : <code>docker compose -f calcul.yml down</code></li>
+  <li>Mettre à jour le calculateur : <code>docker compose -f calcul.yml up -d</code> (télécharge la dernière version)</li>
+</ul>

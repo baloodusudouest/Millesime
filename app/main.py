@@ -228,8 +228,9 @@ def visage(asset_id: str, face_id: str):
 
 # -- calculateur (PC) ------------------------------------------------------------
 @app.get("/api/calcul/taches")
-def taches(n: int = 20):
-    return {"taches": m().taches(max(1, min(n, 100))), "restants": m().compter_taches()}
+def taches(n: int = 20, veille: bool = False, machine: str = ""):
+    signal = m().signal_pc(veille, machine)
+    return {"taches": m().taches(max(1, min(n, 100))), "restants": m().compter_taches(), **signal}
 
 
 @app.post("/api/calcul/resultats")

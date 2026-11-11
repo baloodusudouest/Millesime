@@ -346,3 +346,87 @@ def test_lien_immich_pour_le_navigateur(monkeypatch):
     assert cfg.immich_lien == ""                       # chemin relatif → complété par le navigateur
     monkeypatch.setenv("MILLESIME_IMMICH_LIEN", "http://192.168.1.10:2283/")
     assert Config.depuis_env().immich_lien == "http://192.168.1.10:2283"
+
+
+def test_veille_du_pc(env):
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    from app import main as appmain
+    m = appmain.ETAT["m"]
+    h = {"Authorization": f"Bearer {JC}"}
+    # file pleine : pas de synchro, le PC est noté actif en veille, carnet ne demande plus d'allumer le PC
+    r = client.get("/api/calcul/taches?n=1&veille=true&machine=gaming", headers=h).json()
+    assert r["synchro_lancee"] is False
+    assert client.get("/api/accueil").json()["pc"]["actif"] is True
+    e = client.get("/api/etat", headers={"Authorization": f"Bearer {JK}"}).json()
+    assert e["pc_en_veille"] and "en cours d'analyse" in e["message"]
+    calculer(client, E)
+    # file vide, dernière synchro récente : rien
+    assert client.get("/api/calcul/taches?n=1&veille=true", headers=h).json()["synchro_lancee"] is False
+    # file vide, synchro vieille de plus de 15 min : relecture d'Immich lancée en arrière-plan
+    b = m.base.lire("derniere_synchro"); b["le"] = "2020-01-01T00:00:00"; m.base.ecrire("derniere_synchro", b)
+    assert client.get("/api/calcul/taches?n=1&veille=true", headers=h).json()["synchro_lancee"] is True
+    import time
+    for _ in range(50):
+        if m.base.lire("derniere_synchro")["le"] > "2021":
+            break
+        time.sleep(0.1)
+    assert m.base.lire("derniere_synchro")["le"] > "2021"
+    # sans veille (passe manuelle) : jamais de synchro déclenchée
+    b = m.base.lire("derniere_synchro"); b["le"] = "2020-01-01T00:00:00"; m.base.ecrire("derniere_synchro", b)
+    assert client.get("/api/calcul/taches?n=1", headers=h).json()["synchro_lancee"] is False
+    # PC silencieux depuis longtemps : de nouveau « allume le PC »
+    vu = m.base.lire("pc_vu"); vu["le"] = "2020-01-01T00:00:00"; m.base.ecrire("pc_vu", vu)
+    E["personnes"]["inconnu1"]["birthDate"] = "1970-01-01"
+    client.post("/api/synchroniser")
+    e = client.get("/api/etat", headers={"Authorization": f"Bearer {JK}"}).json()
+    assert not e["pc_en_veille"] and "allume le PC" in e["message"]
+
+
+def test_calculateur_en_veille(env, monkeypatch):
+    """calcul.py en veille : deux cycles, MiVOLO chargé une seule fois, puis rien à faire au second cycle."""
+    import socket
+    import threading
+    import time
+
+    import uvicorn
+
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    from app import main as appmain
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    srv = uvicorn.Server(uvicorn.Config(appmain.app, host="127.0.0.1", port=port, log_level="warning", lifespan="off"))
+    threading.Thread(target=srv.run, daemon=True).start()
+    for _ in range(50):
+        if srv.started:
+            break
+        time.sleep(0.1)
+    for k, v in {"MILLESIME_URL": f"http://127.0.0.1:{port}", "MILLESIME_JETON_CALCUL": JC, "VEILLE": "1",
+                 "VEILLE_CYCLES": "2", "VEILLE_MINUTES": "0.001"}.items():
+        monkeypatch.setenv(k, v)
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mesure"))
+    import importlib
+
+    import calcul
+    importlib.reload(calcul)
+
+    class FauxMiVolo:
+        device = "cpu"
+        charges = 0
+
+        def __init__(self):
+            FauxMiVolo.charges += 1
+
+        def ages(self, image, face):
+            return {"mivolo": 30.0, "mivolo_corps": 31.0}
+
+    monkeypatch.setattr(calcul.mesure, "MiVolo", FauxMiVolo)
+    try:
+        assert calcul.main() == 0
+    finally:
+        srv.should_exit = True
+    assert FauxMiVolo.charges == 1
+    assert client.get("/api/accueil").json()["taches"] == {"calibrage": 0, "a_dater": 0}
+    assert client.get("/api/accueil").json()["pc"]["veille"] is True
