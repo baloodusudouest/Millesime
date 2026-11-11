@@ -1,5 +1,6 @@
 <script>
   import { api, apercu, dateCourte } from '../lib/api.svelte.js'
+  let { integre = false } = $props()   // 2.0 : affiché dans Réglages
   let liste = $state(null)
   let erreur = $state('')
   async function charger() {
@@ -19,7 +20,7 @@
   }
 </script>
 
-<h1 class="millesime text-4xl font-semibold">Journal</h1>
+{#if integre}<h2 class="text-lg font-semibold">Journal</h2>{:else}<h1 class="titre-page">Journal</h1>{/if}
 <p class="secondaire mt-2">Chaque écriture dans Immich, avec ce qu'il y avait avant. Annuler remet la date, le tag et l'album d'origine.</p>
 {#if erreur}<p class="mt-3 text-alerte" role="alert">{erreur}</p>{/if}
 

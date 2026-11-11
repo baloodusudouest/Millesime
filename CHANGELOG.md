@@ -1,5 +1,16 @@
 # Journal des versions
 
+## 2.0.0 — 11 novembre 2026
+Millésime prend le format de carnet. Aucune adresse de l'API ne change, ni la base, ni ce qui est écrit dans Immich (le test des écritures de la 1.6.0 passe sans modification).
+- **Habillage commun** : fonds neutres chauds, Inter, sombre par défaut et clair quand l'appareil le demande. La couleur de Millésime est le **lie-de-vin** ; l'or reste ce qui est validé ; l'année proposée et les grands nombres restent en Bodoni.
+- **Navigation de carnet** : rail à gauche sur PC, pilule d'icônes en bas sur iPhone, en quatre entrées — **Dater, À traiter, Connexion, Réglages**.
+- **Dater est l'écran d'ouverture** : aucun geste entre le mot de passe et « Valider ». Sur iPhone, la pilule s'efface dans Dater et dans À trancher ; un lien « ‹ À traiter » en haut ramène à la navigation.
+- **À traiter en tuiles** : le bilan (datées sur le total) en tête, puis À dater, À trancher, À nommer, À vérifier, Sans naissance, À calculer sur le PC. Une tuile ouvre sa file.
+- **Connexion, une tuile par service** : Immich (dernière relecture, Synchroniser maintenant), Calculateur du PC (état en direct, mode d'emploi), carnet (ce qu'il lit).
+- **Réglages** : précision de l'indice, journal des écritures avec Annuler, version, déconnexion.
+- Les anciennes adresses (`#accueil`, `#calcul`, `#journal`) mènent aux nouveaux écrans. L'encart « Home Assistant, à venir » est retiré.
+- Tests : 18 de l'appli, 9 des outils de mesure, 4 d'écran sur PC et sur iPhone.
+
 ## 1.6.0 — 11 novembre 2026
 Les filets avant la refonte. Rien ne change dans les écrans ni dans ce que Millésime écrit.
 - **Mode lecture seule** (`MILLESIME_LECTURE_SEULE=oui`) : Millésime lit Immich, reçoit les calculs du PC et propose des années, mais n'écrit rien dans Immich. Valider, Annuler, nommer et fusionner sont refusés avant toute trace dans le journal ; le client Immich refuse lui-même toute écriture ; un bandeau le rappelle.

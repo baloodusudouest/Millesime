@@ -36,7 +36,7 @@
   }
 </script>
 
-<h1 class="millesime text-4xl font-semibold">Nommer</h1>
+<h1 class="titre-page">Nommer</h1>
 <p class="secondaire mt-2 max-w-2xl">
   Groupes de visages qu'Immich a reconnus sur les scans, sans leur donner de nom. Tape un nouveau nom, ou choisis
   une personne qui existe déjà dans Immich pour y rattacher le groupe. Touche un visage pour voir la photo entière.

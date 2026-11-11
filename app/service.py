@@ -313,6 +313,7 @@ class Millesime:
                               "a_trancher": c.get("a_trancher", 0), "validees": c.get("validee", 0),
                               "plusieurs": c.get("plusieurs", 0), "total": sum(c.values()),
                               "a_nommer": len(self.groupes_a_nommer()),
+                              "sans_naissance": len(self.sans_naissance()),
                               "suspects": len(est.suspects(self.base, self.cfg.seuil_suspect))},
                 "taches": self.compter_taches(), "calibrage": cal,
                 "derniere_synchro": self.base.lire("derniere_synchro"),

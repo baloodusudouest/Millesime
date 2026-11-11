@@ -114,13 +114,13 @@
 
 {#if !s && liste.length === 0}
   <div class="py-16 text-center">
-    <p class="millesime text-4xl font-semibold">{statut === 'a_dater' ? 'Tout est daté' : 'Rien à trancher'}</p>
+    <p class="titre-page">{statut === 'a_dater' ? 'Tout est daté' : 'Rien à trancher'}</p>
     <p class="secondaire mx-auto mt-3 max-w-md">
       {#if statut === 'a_dater'}Les photos restantes attendent le calcul sur le PC, ou sont à trancher.
       {:else}Les cas douteux apparaîtront ici : marge trop large, visages en désaccord, aucun visage exploitable.{/if}
     </p>
     <p class="mt-6 flex justify-center gap-3">
-      <a class="bouton" href="#calcul">Calcul sur le PC</a>
+      <a class="bouton" href="#connexion/pc">Calcul sur le PC</a>
       <a class="bouton" href={statut === 'a_dater' ? '#trancher' : '#nommer'}>{statut === 'a_dater' ? 'À trancher' : 'Nommer des visages'}</a>
     </p>
   </div>

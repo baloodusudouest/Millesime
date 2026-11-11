@@ -17,7 +17,7 @@
 
 {#if pc.etat}
   {#if compact}
-    <a href="#calcul" class="flex items-center gap-2 rounded-md px-2 py-1 text-xs" title={titre}>
+    <a href="#connexion/pc" class="flex items-center gap-2 rounded-md px-2 py-1 text-xs" title={titre}>
       <span class="pastille" class:allumee={actif} class:pulse={pc.etat === 'en_cours'} aria-hidden="true"></span>
       <span class="secondaire">{pc.etat === 'en_cours' ? `PC ${pc.pourcentage} %` : actif ? 'PC prêt' : 'PC éteint'}</span>
       <span class="sr-only">{titre}</span>
@@ -46,7 +46,7 @@
       {:else if pc.etat === 'indisponible'}
         <p class="secondaire mt-1 text-sm">Dernier contact {dateCourte(pc.le)}. {pc.restants ? `${pc.restants} visage${pc.restants > 1 ? 's' : ''} attendent : allume` : 'Pour le prochain calcul, allume'} le PC et ouvre Docker Desktop.</p>
       {:else}
-        <p class="secondaire mt-1 text-sm">Voir le mode d'emploi dans <a class="lien" href="#calcul">Calcul sur le PC</a>.</p>
+        <p class="secondaire mt-1 text-sm">Voir le mode d'emploi dans <a class="lien" href="#connexion/pc">Calcul sur le PC</a>.</p>
       {/if}
     </section>
   {/if}
