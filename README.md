@@ -58,7 +58,8 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `MILLESIME_PASSWORD` | — | Mot de passe de l'interface (celui de carnet) |
-| `MILLESIME_IMMICH_URL` | `http://immich_server:2283` | Adresse d'Immich |
+| `MILLESIME_IMMICH_URL` | `http://immich_server:2283` | Adresse d'Immich vue depuis le conteneur (appels API) |
+| `MILLESIME_IMMICH_LIEN` | — | Adresse d'Immich pour les liens « Ouvrir dans Immich » du navigateur, par ex. `http://192.168.1.10:2283`. Vide : même machine que Millésime, port 2283 |
 | `MILLESIME_IMMICH_CLE` | — | Clé API Immich dédiée |
 | `MILLESIME_JETON_CALCUL` | — | Jeton partagé avec le calculateur du PC |
 | `MILLESIME_JETON_CARNET` | — | Jeton de `GET /api/etat`, lu par carnet |

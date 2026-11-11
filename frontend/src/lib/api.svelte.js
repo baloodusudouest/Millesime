@@ -25,6 +25,14 @@ export const api = {
 export const visage = (asset, face) => `/api/visage/${asset}/${face}`
 export const apercu = (asset) => `/api/apercu/${asset}`
 
+// Lien vers Immich ouvert dans le navigateur. Le serveur renvoie une adresse complète si
+// MILLESIME_IMMICH_LIEN est défini, sinon un chemin (/photos/…) : Immich est alors cherché sur
+// la même machine que Millésime (192.168.1.10, nom Tailscale…), port 2283.
+export function versImmich(lien) {
+  if (!lien || !lien.startsWith('/')) return lien
+  return `http://${location.hostname}:2283${lien}`
+}
+
 export function pluriel(n, mot, motPluriel) {
   return `${n} ${n > 1 ? motPluriel || mot + 's' : mot}`
 }

@@ -2,7 +2,7 @@
   // Un groupe de visages sans nom : vignettes (touchées = photo en grand), champ de nom avec les
   // suggestions d'Immich, rattachement à une personne existante après aperçu, Ignorer.
   // Utilisé par l'écran Nommer et, en version compacte, sous la photo de l'écran Dater.
-  import { api, pluriel, visage } from '../lib/api.svelte.js'
+  import { api, pluriel, versImmich, visage } from '../lib/api.svelte.js'
 
   let { groupe, suggestions, compact = false, onfait, onvoir, surligne = false } = $props()
   let nom = $state('')
@@ -64,14 +64,14 @@
     {#if compact}
       <p class="secondaire self-center text-sm">
         {groupe.visages ? `Groupe Immich de ${pluriel(groupe.visages, 'visage')}` : 'Groupe Immich sans nom'}{groupe.masque ? ', personne masquée dans Immich' : ''}
-        {#if groupe.lien_immich}· <a class="lien" href={groupe.lien_immich} target="_blank" rel="noopener">voir dans Immich</a>{/if}
+        {#if groupe.lien_immich}· <a class="lien" href={versImmich(groupe.lien_immich)} target="_blank" rel="noopener">voir dans Immich</a>{/if}
       </p>
     {/if}
   </div>
   {#if !compact}
     <p class="secondaire mt-2 text-sm">
       {pluriel(groupe.visages, 'visage')}, dont {groupe.sur_non_datees} sur des photos à dater ·
-      <a class="lien" href={groupe.lien_immich} target="_blank" rel="noopener">voir dans Immich</a>
+      <a class="lien" href={versImmich(groupe.lien_immich)} target="_blank" rel="noopener">voir dans Immich</a>
     </p>
   {/if}
 

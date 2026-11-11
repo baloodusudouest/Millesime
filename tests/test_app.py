@@ -332,3 +332,17 @@ def test_relire_une_photo(env):
     noms = {v["face_id"]: v["person_nom"] for v in s["visages"]}
     assert noms["nd-sans-f2"] == "Julien B" and noms["nd-sans-f1"] == "Lucie MARTIN"
     assert s["statut"] == "a_analyser"            # le visage de Julien attend le calcul sur le PC
+
+
+def test_lien_immich_pour_le_navigateur(monkeypatch):
+    """Les liens « Ouvrir dans Immich » ne doivent jamais pointer vers l'adresse interne Docker."""
+    from app.config import Config
+    monkeypatch.setenv("MILLESIME_PASSWORD", "x")
+    monkeypatch.setenv("MILLESIME_IMMICH_CLE", "x")
+    monkeypatch.setenv("MILLESIME_ETAT", "/tmp/millesime-test-lien")
+    monkeypatch.setenv("MILLESIME_IMMICH_URL", "http://immich_server:2283")
+    monkeypatch.delenv("MILLESIME_IMMICH_LIEN", raising=False)
+    cfg = Config.depuis_env()
+    assert cfg.immich_lien == ""                       # chemin relatif → complété par le navigateur
+    monkeypatch.setenv("MILLESIME_IMMICH_LIEN", "http://192.168.1.10:2283/")
+    assert Config.depuis_env().immich_lien == "http://192.168.1.10:2283"

@@ -268,7 +268,7 @@ class Millesime:
             else:
                 v["etat"] = "nomme"
         etats = {v["face_id"]: v["etat"] for v in s["visages"]}
-        s["lien_immich"] = f"{self.cfg.immich_url}/photos/{asset_id}"
+        s["lien_immich"] = f"{self.cfg.immich_lien}/photos/{asset_id}"
         # groupes sans nom présents sur la photo, avec leur nombre total de visages (pour les nommer sur place)
         s["a_nommer"] = self.base.tous(f"""
             SELECT v.person_id, MIN(v.face_id) AS face_id, ? AS asset_id,
@@ -278,7 +278,7 @@ class Millesime:
             GROUP BY v.person_id""", asset_id, asset_id)
         for g in s["a_nommer"]:
             g["exemples"] = [{"face_id": g["face_id"], "asset_id": asset_id}]
-            g["lien_immich"] = f"{self.cfg.immich_url}/people/{g['person_id']}"
+            g["lien_immich"] = f"{self.cfg.immich_lien}/people/{g['person_id']}"
         # un groupe dont tous les visages de la photo ont disparu d'Immich n'est plus à nommer ici
         s["a_nommer"] = [g for g in s["a_nommer"] if any(
             etats.get(v["face_id"]) in ("groupe_sans_nom", "masque") for v in s["visages"] if v["person_id"] == g["person_id"])]
@@ -426,7 +426,7 @@ class Millesime:
         for g in lignes:
             g["exemples"] = self.base.tous("SELECT face_id, asset_id FROM visages WHERE person_id=? LIMIT 6",
                                            g["person_id"])
-            g["lien_immich"] = f"{self.cfg.immich_url}/people/{g['person_id']}"
+            g["lien_immich"] = f"{self.cfg.immich_lien}/people/{g['person_id']}"
         return lignes
 
     @staticmethod
