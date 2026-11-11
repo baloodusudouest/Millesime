@@ -14,14 +14,25 @@ class ErreurImmich(Exception):
     pass
 
 
+class LectureSeule(Exception):
+    """Écriture refusée : Millésime tourne en lecture seule (MILLESIME_LECTURE_SEULE)."""
+
+
+LECTURES_EN_POST = ("/search/",)     # recherches : des POST qui ne modifient rien
+
+
 class Immich:
-    def __init__(self, url: str, cle: str):
+    def __init__(self, url: str, cle: str, lecture_seule: bool = False):
+        self.lecture_seule = lecture_seule
         self.url = url.rstrip("/")
         self.s = requests.Session()
         self.s.headers.update({"x-api-key": cle, "Accept": "application/json"})
 
     # -- transport ------------------------------------------------------------
     def _req(self, methode: str, chemin: str, **kw) -> requests.Response:
+        # 1.6.0 : dernier filet du mode lecture seule, au plus près du réseau
+        if self.lecture_seule and methode.upper() != "GET" and not chemin.startswith(LECTURES_EN_POST):
+            raise LectureSeule("Mode lecture seule : rien n'est écrit dans Immich.")
         for essai, attente in enumerate((*ATTENTES, None), 1):
             try:
                 r = self.s.request(methode, f"{self.url}/api{chemin}", timeout=60, **kw)

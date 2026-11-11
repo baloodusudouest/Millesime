@@ -30,7 +30,7 @@
   const page = $derived(route.page)
   window.addEventListener('hashchange', () => (route = lire()))
 
-  api.get('/api/session').then((s) => { session.connecte = s.connecte; session.version = s.version; suivrePc() })
+  api.get('/api/session').then((s) => { session.connecte = s.connecte; session.version = s.version; session.lecture_seule = !!s.lecture_seule; suivrePc() })
     .catch(() => (session.connecte = false))
 
   async function deconnecter() {
@@ -59,6 +59,10 @@
   </header>
 
   <main class="mx-auto max-w-5xl px-4 pb-28 pt-4 sm:pb-10">
+    {#if session.lecture_seule}
+      <p class="mb-4 rounded-md border border-alerte/50 px-3 py-2 text-sm text-alerte" role="status">
+        Mode lecture seule : Millésime lit Immich et calcule, mais n'y écrit rien (MILLESIME_LECTURE_SEULE).</p>
+    {/if}
     {#if page === 'dater'}<Dater statut="a_dater" />
     {:else if page === 'trancher'}<Dater statut="a_trancher" />
     {:else if page === 'nommer'}<Nommer cible={route.param} />

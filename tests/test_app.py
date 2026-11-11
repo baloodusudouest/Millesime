@@ -1,4 +1,5 @@
 """Tests de l'appli Millésime (serveur NAS) contre le faux Immich, avec un faux calculateur."""
+import json
 import random
 import sys
 from pathlib import Path
@@ -474,3 +475,66 @@ def test_151_noms_obligatoires_et_tag_introuvable(env, monkeypatch):
     assert r.status_code == 400 and "introuvable" in r.json()["detail"]
     assert client.get("/api/accueil").json()["compteurs"] == avant
     main.m().cfg.tag_prefixe = "Numérisation"
+
+
+
+def _pret_a_dater(client, E):
+    connecter(client)
+    client.post("/api/synchroniser")
+    calculer(client, E)
+    cible = client.get("/api/scans?statut=a_dater").json()[0]["asset_id"]
+    return cible, client.get(f"/api/scans/{cible}").json()
+
+
+def test_160_ce_que_valider_envoie_a_immich(env):
+    """Fige les écritures d'une validation et de son annulation : une refonte de l'interface ou du
+    service ne doit pas changer ce que Millésime écrit dans la photothèque."""
+    client, E = env
+    cible, s = _pret_a_dater(client, E)
+    annee, marge = s["annee_proposee"], s["marge"]
+    E["requetes"].clear()
+    r = client.post(f"/api/scans/{cible}/valider", json={"annee": annee, "marge": marge}).json()
+    tag = next(t["id"] for t in E["tags"].values() if t["value"] == r["tag"])
+    album = next(a["id"] for a in E["albums"].values() if a["albumName"] == f"{annee} Numérisation")
+
+    def forme(ecritures):
+        return [(m, c.replace(cible, "<scan>").replace(tag, "<tag>").replace(album, "<album>"),
+                 json.loads(json.dumps(corps).replace(cible, "<scan>").replace(tag, "<tag>").replace(album, "<album>")))
+                for m, c, corps in ecritures]
+    assert forme(E["requetes"]) == [
+        ("PUT", "/api/assets/<scan>", {"dateTimeOriginal": f"{annee}-07-01T12:00:00.000Z"}),
+        ("PUT", "/api/tags", {"tags": [f"Date estimée/{annee} ±{marge}"]}),
+        ("PUT", "/api/tags/<tag>/assets", {"ids": ["<scan>"]}),
+        ("DELETE", "/api/albums/al-nd/assets", {"ids": ["<scan>"]}),
+        ("POST", "/api/albums", {"albumName": f"{annee} Numérisation", "assetIds": ["<scan>"]}),
+    ]
+    E["requetes"].clear()
+    j = client.get("/api/journal").json()[0]
+    assert client.post(f"/api/journal/{j['id']}/annuler").json()["ok"]
+    assert [(m, c) for m, c, _ in forme(E["requetes"])] == [
+        ("PUT", "/api/assets/<scan>"), ("DELETE", "/api/tags/<tag>/assets"),
+        ("DELETE", "/api/albums/<album>/assets"), ("PUT", "/api/albums/al-nd/assets")]
+
+
+def test_160_lecture_seule_rien_n_est_ecrit(env):
+    """En lecture seule : la lecture et le calcul continuent, toute écriture dans Immich est refusée
+    avant d'être journalisée, et le client Immich lui-même refuse d'écrire."""
+    from app import main
+    from app.immich import LectureSeule
+    client, E = env
+    cible, s = _pret_a_dater(client, E)
+    mm = main.m()
+    mm.cfg.lecture_seule = mm.immich.lecture_seule = True
+    assert client.get("/api/session").json()["lecture_seule"] is True
+    E["requetes"].clear()
+    avant = len(client.get("/api/journal").json())
+    r = client.post(f"/api/scans/{cible}/valider", json={"annee": s["annee_proposee"], "marge": s["marge"]})
+    assert r.status_code == 409 and "lecture seule" in r.json()["detail"]
+    assert client.post("/api/nommer/inconnu1", json={"nom": "Quelqu'un"}).status_code == 409
+    assert client.post("/api/nommer/inconnu1/fusionner", json={"cible": "julien"}).status_code == 409
+    assert E["requetes"] == [] and len(client.get("/api/journal").json()) == avant
+    assert client.get(f"/api/scans/{cible}").json()["statut"] == "a_dater"
+    assert client.post("/api/synchroniser").status_code == 200                # la lecture continue
+    with pytest.raises(LectureSeule):
+        mm.immich.changer_date(cible, "2000-07-01T12:00:00.000Z")             # dernier filet, au plus près du réseau
+    assert E["requetes"] == []

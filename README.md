@@ -2,7 +2,7 @@
 
 Dater les photos papier numérisées à partir de l'âge des visages qu'elles contiennent, avec Immich, hors ligne.
 
-> **Version 1.5.1** : une appli sur le NAS (écrans, écriture dans Immich) et un calculateur sur le PC (MiVOLO v2). La conception et les verdicts du conseil sont dans [`docs/conception-v2.md`](docs/conception-v2.md). Les deux tests de mesure qui ont précédé l'appli sont décrits plus bas.
+> **Version 1.6.0** : une appli sur le NAS (écrans, écriture dans Immich) et un calculateur sur le PC (MiVOLO v2). La conception et les verdicts du conseil sont dans [`docs/conception-v2.md`](docs/conception-v2.md). Les deux tests de mesure qui ont précédé l'appli sont décrits plus bas.
 
 ## L'appli
 
@@ -67,6 +67,7 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 | `MILLESIME_JETON_CALCUL` | — | Jeton partagé avec le calculateur du PC |
 | `MILLESIME_JETON_CARNET` | — | Jeton de `GET /api/etat`, lu par carnet |
 | `MILLESIME_SYNCHRO_MINUTES` | `60` | Fréquence de relecture d'Immich |
+| `MILLESIME_LECTURE_SEULE` | — | `oui` : rien n'est écrit dans Immich (premier jour d'une mise en service) |
 | `MILLESIME_SEUIL_DOUTE` | `4` | Marge (en années) au-delà de laquelle la photo va dans « À trancher » |
 | `MILLESIME_SEUIL_SUSPECT` | `12` | Écart d'âge, en années, qui rend un visage suspect |
 | `MILLESIME_TAG_PREFIXE` | — (**obligatoire**) | Préfixe réel des tags de numérisation dans Immich, par ex. `Numérisation` : les scans datés portent `<préfixe>/AAAA-MM`, les autres `<préfixe>/Non datée` |

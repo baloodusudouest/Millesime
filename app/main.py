@@ -16,7 +16,7 @@ from . import __version__
 from . import estimation as est
 from .auth import COOKIE, DUREE, Sessions, jeton_valide
 from .config import Config
-from .immich import ErreurImmich
+from .immich import ErreurImmich, LectureSeule
 from .service import ErreurMillesime, Millesime
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s : %(message)s")
@@ -78,6 +78,18 @@ async def _erreur(_: Request, exc: ErreurMillesime):
     return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
+@app.exception_handler(LectureSeule)
+async def _erreur_lecture_seule(_: Request, exc: LectureSeule):
+    return JSONResponse({"detail": str(exc)}, status_code=409)
+
+
+def ecriture() -> None:
+    """À appeler en tête de toute route qui écrit dans Immich : refus net en lecture seule,
+    avant toute trace dans le journal."""
+    if m().cfg.lecture_seule:
+        raise LectureSeule("Mode lecture seule (MILLESIME_LECTURE_SEULE) : rien n'est écrit dans Immich.")
+
+
 @app.exception_handler(ErreurImmich)
 async def _erreur_immich(_: Request, exc: ErreurImmich):
     return JSONResponse({"detail": str(exc)}, status_code=502)
@@ -91,7 +103,8 @@ def sante():
 # -- connexion -------------------------------------------------------------------
 @app.get("/api/session")
 def session(request: Request):
-    return {"connecte": ETAT["sessions"].valide(request.cookies.get(COOKIE)), "version": __version__}
+    return {"connecte": ETAT["sessions"].valide(request.cookies.get(COOKIE)), "version": __version__,
+            "lecture_seule": m().cfg.lecture_seule}
 
 
 @app.post("/api/connexion")
@@ -146,6 +159,7 @@ def scan(asset_id: str):
 
 @app.post("/api/scans/{asset_id}/valider")
 def valider(asset_id: str, corps: dict = Body(...)):
+    ecriture()
     return m().valider(asset_id, corps.get("annee"), corps.get("marge", 1))
 
 
@@ -166,6 +180,7 @@ def journal():
 
 @app.post("/api/journal/{jid}/annuler")
 def annuler(jid: int):
+    ecriture()
     return m().annuler(jid)
 
 
@@ -176,6 +191,7 @@ def a_nommer():
 
 @app.post("/api/nommer/{person_id}")
 def nommer(person_id: str, corps: dict = Body(...)):
+    ecriture()
     return m().nommer(person_id, str(corps.get("nom", "")))
 
 
@@ -191,6 +207,7 @@ def apercu_fusion(source_id: str, cible_id: str):
 
 @app.post("/api/nommer/{source_id}/fusionner")
 def fusionner(source_id: str, corps: dict = Body(...)):
+    ecriture()
     return m().fusionner(source_id, str(corps.get("cible", "")))
 
 
