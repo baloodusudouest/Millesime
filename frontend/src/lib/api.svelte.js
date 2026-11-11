@@ -1,5 +1,5 @@
 // Appels à l'API Millésime. Une réponse 401 renvoie à l'écran de connexion.
-export const session = $state({ connecte: null, version: '' })
+export const session = $state({ connecte: null, version: '', lecture_seule: false })
 
 async function appel(methode, chemin, corps) {
   const r = await fetch(chemin, {

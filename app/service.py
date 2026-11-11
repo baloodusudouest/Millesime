@@ -50,7 +50,7 @@ class Millesime:
     def __init__(self, cfg: Config, immich: Immich | None = None):
         self.cfg = cfg
         self.base = Base(cfg.etat_dir / "millesime.db")
-        self.immich = immich or Immich(cfg.immich_url, cfg.immich_cle)
+        self.immich = immich or Immich(cfg.immich_url, cfg.immich_cle, cfg.lecture_seule)
         self.verrou_synchro = threading.Lock()
         self.apercus = Cache(24)
         self.visages_immich = Cache(256)

@@ -4,13 +4,14 @@ Fichier à lire en premier dans une nouvelle session, et à mettre à jour à ch
 
 ## État (11/11/2026)
 
-- **1.5.1 sur `main`** : noms de tags et d'albums obligatoires dans la stack. Historique du dépôt réécrit le même jour (noms de personnes, adresse locale, chemin du NAS retirés).
+- **1.6.0 sur `main`** : mode lecture seule, test qui fige les écritures dans Immich, premier test d'écran.
+- 1.5.1 : noms de tags et d'albums obligatoires dans la stack. Historique du dépôt réécrit le même jour (noms de personnes, adresse locale, chemin du NAS retirés).
 - Dossier « tel que construit » et écarts avec carnet : [`docs/dossier.md`](docs/dossier.md). Avis du conseil : [`docs/2.0-conseil.md`](docs/2.0-conseil.md).
 - Décisions de Julien (11/11) : quatre entrées (Dater, À traiter, Connexion, Réglages), couleur lie-de-vin, année en Bodoni gardée, trois livraisons à la suite (1.5.1, 1.6.0, 2.0.0).
 
 ## Prochaine étape
 
-1. **1.6.0** : mode lecture seule, versions de l'interface figées, un test d'écran (Dater puis Valider), test qui fige les requêtes envoyées à Immich.
+1. Julien n'a pas encore déployé la 1.5.1 (trois variables à poser dans Portainer d'abord, `homelab.yml` du projet à renvoyer quand il le demande).
 2. **2.0.0** : habillage de carnet en lie-de-vin, rail sur PC et pilule sur iPhone, quatre entrées, tuiles, Connexion, Réglages. Critère : pas un geste de plus qu'en 1.5 pour valider une photo. Sauvegarde d'Immich avant la mise en service.
 
 ## Décisions tranchées

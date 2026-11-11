@@ -10,6 +10,7 @@ on:
       - "app/**"
       - "frontend/**"
       - "tests/test_app.py"
+      - "tests/interface/**"
       - "tests/faux_immich_app.py"
       - "mesure/calcul.py"
       - "requirements.txt"
@@ -36,7 +37,12 @@ jobs:
           node-version: "22"
       - name: Interface compilée
         working-directory: frontend
-        run: npm ci --no-audit --no-fund && npx vite build --outDir /tmp/static
+        run: npm ci --no-audit --no-fund && npx vite build
+      - name: Tests d'écran (PC et iPhone, faux Immich)
+        run: |
+          pip install playwright==1.63.0
+          python -m playwright install --with-deps chromium || python -m playwright install chromium
+          python -m pytest -q tests/interface
 
   image:
     needs: tests

@@ -71,6 +71,7 @@ def construire():
 
 def demarrer():
     E = construire()
+    E["requetes"] = []
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -150,6 +151,8 @@ def demarrer():
             if not self._ok():
                 return
             c = self._corps()
+            if not self.path.startswith("/api/search/"):
+                E["requetes"].append(("POST", self.path, c))      # 1.6.0 : ce que Millésime écrit vraiment
             if self.path == "/api/search/metadata":
                 if "tagIds" in c:
                     ids = sorted(E["tag_assets"].get(c["tagIds"][0], set()))
@@ -188,6 +191,8 @@ def demarrer():
             if not self._ok():
                 return
             c = self._corps()
+            if not self.path.startswith("/api/search/"):
+                E["requetes"].append(("PUT", self.path, c))      # 1.6.0 : ce que Millésime écrit vraiment
             if self.path == "/api/tags":
                 res = []
                 for v in c["tags"]:
@@ -229,6 +234,8 @@ def demarrer():
             if not self._ok():
                 return
             c = self._corps()
+            if not self.path.startswith("/api/search/"):
+                E["requetes"].append(("DELETE", self.path, c))      # 1.6.0 : ce que Millésime écrit vraiment
             m = re.fullmatch(r"/api/tags/([^/]+)/assets", self.path)
             if m:
                 E["tag_assets"].get(m.group(1), set()).difference_update(c["ids"])

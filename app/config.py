@@ -29,6 +29,7 @@ class Config:
     # Adresse d'Immich pour les liens ouverts dans le navigateur (différente de l'adresse interne
     # au réseau Docker). Vide : le navigateur ouvre Immich sur la même machine que Millésime, port 2283.
     immich_lien: str = ""
+    lecture_seule: bool = False     # 1.6.0 : aucune écriture dans Immich
 
     @classmethod
     def depuis_env(cls) -> "Config":
@@ -66,4 +67,5 @@ class Config:
             seuil_suspect=float(_env("MILLESIME_SEUIL_SUSPECT", "12")),
             synchro_minutes=int(_env("MILLESIME_SYNCHRO_MINUTES", "60")),
             immich_lien=_env("MILLESIME_IMMICH_LIEN").rstrip("/"),
+            lecture_seule=_env("MILLESIME_LECTURE_SEULE").lower() in ("oui", "1", "true", "yes"),
         )
