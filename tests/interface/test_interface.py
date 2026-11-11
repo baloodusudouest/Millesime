@@ -53,7 +53,7 @@ def page(request, navigateur, adresse):
     pg.goto(adresse)
     pg.get_by_label(re.compile("Mot de passe")).fill("essai")
     pg.get_by_role("button", name="Se connecter").click()
-    pg.locator("nav[aria-label='Principale']").locator("visible=true").first.wait_for()
+    pg.wait_for_selector("main")
     yield pg
     assert not erreurs, erreurs
     ctx.close()
@@ -61,7 +61,7 @@ def page(request, navigateur, adresse):
 
 def test_dater_une_photo_puis_valider_et_annuler(page):
     """Le geste répété : ouvrir Dater, lire l'année proposée, valider, pouvoir annuler."""
-    page.goto(page.url.split("#")[0] + "#dater")
+    # 2.0 : Dater est l'écran d'ouverture : aucun geste entre le mot de passe et « Valider »
     valider = page.get_by_role("button", name=re.compile(r"^(Valider|Confirmer) \d{4}"))
     valider.wait_for()
     annee = re.search(r"\d{4}", valider.inner_text()).group(0)
@@ -76,3 +76,61 @@ def test_dater_une_photo_puis_valider_et_annuler(page):
     message.get_by_role("button", name="Annuler").click()                                # le serveur est partagé : on remet
     page.wait_for_function("!document.querySelector('[role=status] button')")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+
+
+# ------------------------------------------------------------------ 2.0 : navigation, tuiles, Connexion, Réglages
+
+def large(page):
+    return page.viewport_size["width"] >= 900
+
+
+def aller(page, onglet):
+    """Par la navigation : rail sur PC, pilule sur iPhone (effacée dans Dater : on passe par « ‹ À traiter »)."""
+    if not large(page) and not page.locator("nav[aria-label='Principale']").is_visible():
+        page.get_by_role("link", name="‹ À traiter").click()
+        page.wait_for_selector("nav[aria-label='Files à traiter']")
+    page.locator(f"nav[aria-label='Principale'] a[aria-label='{onglet}']").click()
+
+
+def test_20_quatre_entrees_et_pilule_effacee_dans_dater(page):
+    page.get_by_role("button", name=re.compile(r"^(Valider|Confirmer) \d{4}")).wait_for()
+    nav = page.locator("nav[aria-label='Principale']")
+    assert nav.locator("a.onglet").count() == 4
+    assert [a.get_attribute("aria-label") for a in nav.locator("a.onglet").all()] == ["Dater", "À traiter", "Connexion", "Réglages"]
+    assert nav.is_visible() == large(page)                                             # iPhone : rien entre le pouce et Valider
+    aller(page, "À traiter")
+    page.wait_for_selector("nav[aria-label='Files à traiter'] .tuile")
+    assert nav.is_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+
+
+def test_20_a_traiter_en_tuiles(page):
+    aller(page, "À traiter")
+    tuiles = page.locator("nav[aria-label='Files à traiter'] .tuile")
+    tuiles.first.wait_for()
+    noms = tuiles.locator(".nom-tuile").all_inner_texts()
+    assert noms[:5] == ["À dater", "À trancher", "À nommer", "À vérifier", "Sans naissance"]
+    assert page.get_by_label(re.compile(r"photos datées sur")).count() == 1            # le bilan reste en tête
+    tuiles.filter(has_text="À nommer").click()
+    page.get_by_role("heading", name="Nommer").wait_for()
+    assert page.locator("nav[aria-label='Principale'] a[aria-current='page']").get_attribute("aria-label") == "À traiter"
+
+
+def test_20_connexion_par_service_et_reglages(page):
+    aller(page, "Connexion")
+    services = page.locator("nav[aria-label='Services'] .tuile")
+    services.first.wait_for()
+    assert services.locator(".nom-tuile").all_inner_texts() == ["Immich", "Calculateur du PC", "carnet"]
+    services.filter(has_text="Immich").click()
+    page.get_by_role("button", name="Synchroniser maintenant").click()
+    page.get_by_role("button", name="Synchroniser maintenant").wait_for()              # revenu après la synchronisation
+    assert "Dernière relecture" in page.locator("section[aria-label='Immich']").inner_text()
+    services.filter(has_text="Calculateur du PC").click()
+    page.locator("section[aria-label='Calculateur du PC']").wait_for()
+    aller(page, "Réglages")
+    page.get_by_role("heading", name="Journal").wait_for()
+    assert page.get_by_role("heading", name="Précision de l'indice").count() == 1
+    page.goto(page.url.split("#")[0] + "#journal")                                     # ancienne adresse : mène à Réglages
+    page.get_by_role("heading", name="Réglages").wait_for()
+    page.get_by_role("button", name="Se déconnecter").click()
+    page.get_by_role("button", name="Se connecter").wait_for()

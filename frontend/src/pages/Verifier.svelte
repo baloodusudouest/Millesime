@@ -11,7 +11,7 @@
   })
 </script>
 
-<h1 class="millesime text-4xl font-semibold">À vérifier</h1>
+<h1 class="titre-page">À vérifier</h1>
 <p class="secondaire mt-2 max-w-2xl">
   Sur des scans datés par tampon, ces visages paraissent beaucoup plus jeunes ou plus âgés que l'âge connu de la
   personne. Souvent, le groupe de visages Immich mélange deux personnes (un parent et son enfant), ou la date de

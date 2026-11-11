@@ -2,19 +2,19 @@
 
 Dater les photos papier numérisées à partir de l'âge des visages qu'elles contiennent, avec Immich, hors ligne.
 
-> **Version 1.6.0** : une appli sur le NAS (écrans, écriture dans Immich) et un calculateur sur le PC (MiVOLO v2). La conception et les verdicts du conseil sont dans [`docs/conception-v2.md`](docs/conception-v2.md). Les deux tests de mesure qui ont précédé l'appli sont décrits plus bas.
+> **Version 2.0.0** : une appli sur le NAS (écrans, écriture dans Immich) et un calculateur sur le PC (MiVOLO v2). La conception et les verdicts du conseil sont dans [`docs/conception-v2.md`](docs/conception-v2.md). Les deux tests de mesure qui ont précédé l'appli sont décrits plus bas.
 
 ## L'appli
 
 | Écran | Rôle |
 |---|---|
-| Accueil | Photos datées / total, choses à faire, précision du calibrage, synchronisation |
-| Dater | Photo et visages, année proposée ± marge, bornes, frise de chaque personne ; Valider, Passer, Plusieurs années |
+| Dater (écran d'ouverture) | Photo et visages, année proposée ± marge, bornes, frise de chaque personne ; Valider, Passer, Plusieurs années |
 | À trancher | Cas douteux : marge trop large, visages en désaccord, aucun visage exploitable |
 | Nommer | Groupes de visages sans nom sur les scans : nouveau nom, ou rattachement à une personne d'Immich (suggestions, aperçu côte à côte, fusion annulable) ; un visage touché s'affiche en grand |
 | À vérifier | Visages dont l'âge estimé contredit l'âge connu, signe d'un groupe mélangé ou d'une naissance fausse |
-| Calcul sur le PC | Mode d'emploi du calculateur et nombre de visages en attente |
-| Journal | Chaque écriture dans Immich, avec Annuler |
+| À traiter | Bilan (photos datées sur le total) et une tuile par file : À dater, À trancher, À nommer, À vérifier, Sans naissance, À calculer sur le PC |
+| Connexion | Une tuile par service : Immich (relecture), Calculateur du PC (état, mode d'emploi), carnet |
+| Réglages | Précision de l'indice, journal de chaque écriture dans Immich avec Annuler, déconnexion |
 
 **Écriture à la validation** :
 

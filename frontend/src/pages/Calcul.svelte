@@ -1,13 +1,14 @@
 <script>
   import { api, dateCourte, pc } from '../lib/api.svelte.js'
   import EtatPC from '../components/EtatPC.svelte'
+  let { integre = false } = $props()   // 2.0 : affiché dans Connexion, sous la tuile du calculateur
   let a = $state(null)
   api.get('/api/accueil').then((r) => (a = r))
   const total = $derived(a ? a.taches.calibrage + a.taches.a_dater : 0)
   const adresse = `${location.protocol}//${location.host}`
 </script>
 
-<h1 class="millesime text-4xl font-semibold">Calcul sur le PC</h1>
+{#if !integre}<h1 class="titre-page">Calcul sur le PC</h1>{/if}
 {#if a && pc.etat !== 'en_cours'}
   <p class="mt-3 text-lg">
     {#if total}<strong>{total}</strong> visage{total > 1 ? 's' : ''} attendent l'analyse

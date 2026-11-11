@@ -1,6 +1,6 @@
-# Dossier de Millésime — tel que construit (version 1.5.0)
+# Dossier de Millésime — tel que construit (version 2.0.0)
 
-Rédigé le 11/11/2026 à partir du code, à la réouverture de l'appli pour la mettre au même format que carnet (2.9). Six sections, puis les écarts avec carnet et le socle commun, puis le plan proposé.
+Rédigé le 11/11/2026 à partir du code (1.5.0), à la réouverture de l'appli pour la mettre au même format que carnet (2.9) ; **mis à jour le même jour pour la 2.0.0** : les sections 3 et 4 décrivent la 1.5 et sont suivies de ce qui a changé, le tableau des écarts dit ce qui est fait. Six sections, puis les écarts avec carnet et le socle commun, puis le plan proposé.
 
 L'histoire de la conception (tests de mesure, décisions, verdicts du conseil, versions 1.0 à 1.5) reste dans [`conception-v2.md`](conception-v2.md) ; ce dossier décrit ce qui existe.
 
@@ -64,7 +64,13 @@ flowchart TD
 
 **Écriture à la validation** : date au 1er juillet à 12:00, tag « Date estimée/AAAA ±N », retrait de l'album des non datées, ajout à l'album de l'année.
 
+### Depuis la 2.0.0
+
+Quatre entrées : **Dater** (écran d'ouverture, s'ouvre sur la prochaine photo), **À traiter** (bilan puis tuiles : À dater, À trancher, À nommer, À vérifier, Sans naissance, À calculer sur le PC), **Connexion** (une tuile par service : Immich, Calculateur du PC, carnet), **Réglages** (précision de l'indice, journal avec Annuler, déconnexion). Rail à gauche sur PC ; pilule d'icônes en bas sur iPhone, effacée dans Dater et À trancher où un lien « ‹ À traiter » la remplace. À trancher, Nommer et À vérifier s'ouvrent par leur tuile. Les gestes de chaque écran n'ont pas changé.
+
 ## 4. Design
+
+**Depuis la 2.0.0** : l'habillage de carnet — fonds neutres chauds, Inter, sombre par défaut et clair selon l'appareil, tuiles. Couleur de l'appli : lie-de-vin (action attendue, onglet actif, compteurs). L'or reste ce qui est validé ; l'année et les grands nombres restent en Bodoni. Ce qui suit décrit la 1.5.
 
 Habillage propre à Millésime, « cave à vin » : fond vert bouteille, texte ivoire, lie-de-vin pour agir, or pour ce qui est validé. Texte en Public Sans ; l'année proposée et les grands nombres en Bodoni, comme un millésime sur une étiquette. Sombre uniquement. Surfaces à filet, coins de 6 à 8 px. L'Accueil est une liste, pas une grille de tuiles.
 
@@ -94,18 +100,18 @@ Proposé pour la suite : voir « Plan proposé » en fin de dossier.
 
 | # | Écart | Constat | Gravité | Proposition |
 |---|---|---|---|---|
-| 1 | Habillage | Thème « cave à vin » : fonds verts, Public Sans, sombre seulement | Voulu à l'origine, à aligner | Fonds neutres chauds et boutons de carnet, Inter, sombre par défaut et clair selon l'appareil. **Couleur de l'appli : lie-de-vin** (décision du 11/11). L'année en Bodoni et l'or du « validé » sont gardés : c'est la signature de Millésime |
-| 2 | Navigation | Bandeau en haut sur PC ; barre de quatre mots sur iPhone ; trois écrans sans onglet sur iPhone | Moyen | Rail à gauche sur PC, pilule d'icônes en bas sur iPhone, comme carnet |
-| 3 | Écran d'ouverture | Liste de cinq lignes | Moyen | Grille de tuiles « À traiter » : À dater, À trancher, À nommer, À vérifier, Sans naissance. Une tuile ouvre sa file. Le bilan (datées sur total) reste en tête |
-| 4 | Services | Immich, PC, carnet et Home Assistant sont éparpillés (Accueil, Calcul sur le PC) | Moyen | Onglet **Connexion**, une tuile par service : Immich (voyant, Synchroniser), Calculateur du PC (état en direct, mode d'emploi), carnet (ce qu'il lit), Home Assistant (à venir) |
-| 5 | Réglages | Pas d'écran ; déconnexion et version en bas de l'Accueil | Faible | Onglet **Réglages** : calibrage et précision, journal avec Annuler, déconnexion, version |
-| 6 | Nombre d'onglets | Sept entrées | Moyen | Trois onglets : À traiter, Connexion, Réglages. Dater, À trancher, Nommer et À vérifier deviennent les files ouvertes par les tuiles |
-| 7 | Lecture seule | Pas de mode lecture seule | Moyen | `MILLESIME_LECTURE_SEULE`, comme carnet : toute écriture dans Immich refusée, bandeau visible. Sert au premier jour d'une mise en service |
-| 8 | Tests d'écran | Aucun | Moyen | Tests sur PC et sur iPhone avec un faux Immich, lancés sur GitHub, comme carnet |
+| 1 | Habillage | Thème « cave à vin » : fonds verts, Public Sans, sombre seulement | Voulu à l'origine, à aligner | Fonds neutres chauds et boutons de carnet, Inter, sombre par défaut et clair selon l'appareil. **Couleur de l'appli : lie-de-vin** (décision du 11/11). L'année en Bodoni et l'or du « validé » sont gardés : c'est la signature de Millésime — **Fait en 2.0.0** |
+| 2 | Navigation | Bandeau en haut sur PC ; barre de quatre mots sur iPhone ; trois écrans sans onglet sur iPhone | Moyen | Rail à gauche sur PC, pilule d'icônes en bas sur iPhone, comme carnet — **Fait en 2.0.0** |
+| 3 | Écran d'ouverture | Liste de cinq lignes | Moyen | Grille de tuiles « À traiter » : À dater, À trancher, À nommer, À vérifier, Sans naissance. Une tuile ouvre sa file. Le bilan (datées sur total) reste en tête — **Fait en 2.0.0** (Dater reste l'écran d'ouverture, avis du conseil) |
+| 4 | Services | Immich, PC, carnet et Home Assistant sont éparpillés (Accueil, Calcul sur le PC) | Moyen | Onglet **Connexion**, une tuile par service : Immich (voyant, Synchroniser), Calculateur du PC (état en direct, mode d'emploi), carnet (ce qu'il lit), Home Assistant (à venir) — **Fait en 2.0.0** |
+| 5 | Réglages | Pas d'écran ; déconnexion et version en bas de l'Accueil | Faible | Onglet **Réglages** : calibrage et précision, journal avec Annuler, déconnexion, version — **Fait en 2.0.0** |
+| 6 | Nombre d'onglets | Sept entrées | Moyen | Trois onglets : À traiter, Connexion, Réglages. Dater, À trancher, Nommer et À vérifier deviennent les files ouvertes par les tuiles — **Fait en 2.0.0** : quatre entrées et non trois, Dater gardant la sienne (avis du conseil) |
+| 7 | Lecture seule | Pas de mode lecture seule | Moyen | `MILLESIME_LECTURE_SEULE`, comme carnet : toute écriture dans Immich refusée, bandeau visible. Sert au premier jour d'une mise en service — **Fait en 1.6.0** |
+| 8 | Tests d'écran | Aucun | Moyen | Tests sur PC et sur iPhone avec un faux Immich, lancés sur GitHub, comme carnet — **Fait en 1.6.0 (un parcours) puis 2.0.0 (quatre)** |
 | 9 | Publication | L'image attend les tests (mieux que carnet) ; les tests ne tournent que si certains dossiers changent | Faible | Garder ; ajouter les tests d'écran au même enchaînement |
-| 10 | Documents | Pas de `REPRISE.md`, pas de journal des versions ; ce dossier est nouveau | Faible | `REPRISE.md`, `CHANGELOG.md`, ce dossier tenu à jour, miroir dans le projet |
-| 11 | Données personnelles dans le dépôt public | Les noms de tags et d'albums par défaut contiennent un prénom (`config.py`, README) | **À corriger** | Défauts neutres dans le code ; les vrais noms passent par les variables de la stack, déjà prévues (`MILLESIME_TAG_PREFIXE`, `MILLESIME_ALBUM_NON_DATEES`, `MILLESIME_MODELE_ALBUM`). À faire **avant** le reste, avec les variables posées dans Portainer en même temps, sinon l'appli ne retrouve plus ses scans |
-| 12 | Versions de l'interface | Sept dépendances avec `^` | Faible | Versions figées, comme carnet |
+| 10 | Documents | Pas de `REPRISE.md`, pas de journal des versions ; ce dossier est nouveau | Faible | `REPRISE.md`, `CHANGELOG.md`, ce dossier tenu à jour, miroir dans le projet — **Fait en 1.5.1 à 2.0.0** |
+| 11 | Données personnelles dans le dépôt public | Les noms de tags et d'albums par défaut contiennent un prénom (`config.py`, README) | **À corriger** | Défauts neutres dans le code ; les vrais noms passent par les variables de la stack, déjà prévues (`MILLESIME_TAG_PREFIXE`, `MILLESIME_ALBUM_NON_DATEES`, `MILLESIME_MODELE_ALBUM`). À faire **avant** le reste, avec les variables posées dans Portainer en même temps, sinon l'appli ne retrouve plus ses scans — **Fait en 1.5.1** ; historique réécrit le même jour |
+| 12 | Versions de l'interface | Sept dépendances avec `^` | Faible | Versions figées, comme carnet — **Fait en 1.6.0** |
 | 13 | Schéma | Pas de numéro de version | Faible | Ajouter un numéro, migrations additives seulement |
 | 14 | Home Assistant | Rien ; encart « à venir » | Hors sujet ici | Laissé pour une version à part (capteur « photos à dater », rappel d'allumer le PC) |
 
@@ -123,7 +129,7 @@ Trois livraisons, chacune utilisable seule.
 
 Aucune adresse de l'API ne change, ni le schéma, ni ce que Millésime écrit dans Immich : le calculateur du PC et carnet continuent de fonctionner sans modification.
 
-**Ce qui reste à trancher par Julien :**
+**Tranché par Julien le 11/11/2026** : quatre entrées, historique réécrit, les trois livraisons à la suite. Questions posées avant :
 1. Trois onglets (À traiter, Connexion, Réglages) ou garder Dater et Nommer en onglets à part.
 2. Le journal dans Réglages, ou dans Connexion › Immich.
 3. Les trois livraisons, ou une seule comme la 2.9 de carnet.

@@ -1,38 +1,54 @@
 @import "tailwindcss";
 
-/* Cave à vin : fond vert bouteille, texte ivoire d'étiquette, lie-de-vin pour agir, or pour les
-   années validées. L'élément marquant : l'année proposée, composée en Bodoni comme un millésime
-   sur une étiquette. Tout le reste reste sobre. */
+/* Habillage commun aux applis (2.0.0), celui de carnet : minimalisme chaleureux, fonds neutres
+   teintés, filets fins, sombre par défaut et clair quand l'appareil le demande.
+   La couleur de Millésime est le lie-de-vin : elle porte l'action attendue (bouton plein), l'onglet
+   actif, les compteurs. L'or reste ce qui est validé. La signature de l'appli est gardée : l'année
+   proposée et les grands nombres en Bodoni, comme un millésime sur une étiquette.
+   Les noms des couleurs sont ceux de l'ancien thème (verre, étiquette…) : seules leurs valeurs changent. */
 @theme {
-  --color-verre: #121c1a;       /* fond */
-  --color-verre-2: #1a2724;     /* surfaces */
-  --color-filet: #2c3b37;       /* filets */
-  --color-champ: #6f7f78;       /* bord des champs (≥ 3:1 sur le fond) */
-  --color-etiquette: #ebe3cf;   /* texte principal */
-  --color-craie: #a6aea2;       /* texte secondaire */
-  --color-lie: #c4577a;         /* actions */
+  --color-verre: #151311;       /* fond : anthracite chaud */
+  --color-verre-2: #1f1c19;     /* surfaces */
+  --color-filet: #312c27;       /* filets */
+  --color-tranche: #4b443c;     /* bordures des boutons */
+  --color-champ: #82776b;       /* bord des champs (≥ 3:1 sur le fond) */
+  --color-etiquette: #f2ece2;   /* texte principal */
+  --color-craie: #a89e91;       /* texte secondaire */
+  --color-lie: #b8405f;         /* la couleur de Millésime, lie-de-vin : actions */
+  --color-sur-lie: #ffffff;     /* texte posé sur le lie-de-vin */
   --color-lie-fonce: #7a2e46;
   --color-or: #d4b86a;          /* validé, millésime */
-  --color-alerte: #e0795f;
+  --color-sur-or: #221a05;
+  --color-alerte: #ef7b72;
+  --color-ombre: rgb(0 0 0 / 0.5);
 
-  --font-sans: "Public Sans Variable", system-ui, sans-serif;
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-millesime: "Bodoni Moda Variable", "Didot", Georgia, serif;
 }
 
 @layer base {
   html { color-scheme: dark; -webkit-text-size-adjust: 100%; }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --color-verre: #faf7f2; --color-verre-2: #f1ece3; --color-filet: #e3dbcd; --color-tranche: #cabfad;
+      --color-champ: #8c8275; --color-etiquette: #1e1a16; --color-craie: #6f665b;
+      --color-lie: #8e2a48; --color-sur-lie: #ffffff; --color-lie-fonce: #6b1f36;
+      --color-or: #8a6a12; --color-sur-or: #ffffff;
+      --color-alerte: #c0392b; --color-ombre: rgb(30 30 40 / 0.16);
+    }
+    html { color-scheme: light; }
+  }
   body {
     background: var(--color-verre); color: var(--color-etiquette);
     font-family: var(--font-sans); font-size: 15px; line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-    padding-bottom: env(safe-area-inset-bottom);
+    -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01";
   }
-  :focus-visible { outline: 2px solid var(--color-or); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--color-lie); outline-offset: 2px; }
   input {
-    background: var(--color-verre); border: 1px solid var(--color-champ); border-radius: 6px;
+    background: var(--color-verre); border: 1px solid var(--color-champ); border-radius: 8px;
     padding: 0.5rem 0.65rem; color: var(--color-etiquette); width: 100%; font-size: 16px;
   }
-  input:focus { border-color: var(--color-or); outline: none; }
+  input:focus { border-color: var(--color-lie); outline: none; }
   button { cursor: pointer; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -42,18 +58,37 @@
 @layer components {
   .bouton {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
-    min-height: 2.75rem; padding: 0.45rem 1rem; border-radius: 6px;
-    border: 1px solid var(--color-filet); color: var(--color-etiquette); font-weight: 500;
+    min-height: 2.75rem; padding: 0.45rem 1rem; border-radius: 8px;
+    border: 1px solid var(--color-tranche); color: var(--color-etiquette); font-weight: 500;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
   }
-  .bouton:hover { border-color: var(--color-champ); }
+  .bouton:hover { background: var(--color-verre-2); }
   .bouton:disabled { opacity: 0.45; cursor: not-allowed; }
-  .bouton-principal { background: var(--color-lie); border-color: var(--color-lie); color: #1a0b10; font-weight: 650; }
-  .bouton-principal:hover { background: #d36a8b; border-color: #d36a8b; }
-  .bouton-confirmer { background: var(--color-or); border-color: var(--color-or); color: #221a05; font-weight: 650; }
+  /* Un seul bouton plein par bloc : l'action attendue, en lie-de-vin */
+  .bouton-principal { background: var(--color-lie); border-color: var(--color-lie); color: var(--color-sur-lie); font-weight: 650; }
+  .bouton-principal:hover { background: color-mix(in srgb, var(--color-lie) 88%, var(--color-etiquette)); border-color: transparent; }
+  .bouton-confirmer { background: var(--color-or); border-color: var(--color-or); color: var(--color-sur-or); font-weight: 650; }
   .millesime { font-family: var(--font-millesime); font-variant-numeric: lining-nums; letter-spacing: -0.02em; }
-  .surface { background: var(--color-verre-2); border: 1px solid var(--color-filet); border-radius: 8px; }
+  /* Titre d'écran : grand et fin, comme dans carnet */
+  .titre-page { font-size: 1.9rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1.15; }
+  .surface { background: var(--color-verre-2); border: 1px solid var(--color-filet); border-radius: 12px; }
   .secondaire { color: var(--color-craie); }
   .lien { color: var(--color-etiquette); text-decoration: underline; text-underline-offset: 3px;
           text-decoration-color: var(--color-champ); }
-  .lien:hover { text-decoration-color: var(--color-or); }
+  .lien:hover { text-decoration-color: var(--color-lie); }
+  /* Tuiles : À traiter et Connexion */
+  .tuiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+  @media (min-width: 900px) { .tuiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .tuile {
+    display: grid; gap: 0.2rem; align-content: start; text-align: left; padding: 0.9rem 1rem; border-radius: 12px;
+    background: var(--color-verre-2); border: 1px solid var(--color-filet); color: var(--color-etiquette); min-height: 6.5rem;
+    transition: border-color 0.15s ease;
+  }
+  .tuile:hover, .tuile[aria-pressed="true"] { border-color: var(--color-lie); }
+  .tuile.vide { background: transparent; color: var(--color-craie); }
+  .tuile svg { width: 1.6rem; height: 1.6rem; color: var(--color-lie); }
+  .tuile.vide svg { color: var(--color-craie); }
+  .tuile .chiffre { font-family: var(--font-millesime); font-size: 2.1rem; font-weight: 600; line-height: 1.05; }
+  .tuile .nom-tuile { font-size: 0.92rem; }
+  .tuile .resume { font-size: 0.8rem; color: var(--color-craie); }
 }

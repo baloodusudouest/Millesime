@@ -1,5 +1,5 @@
 import { mount } from 'svelte'
-import '@fontsource-variable/public-sans'
+import '@fontsource-variable/inter'
 import '@fontsource-variable/bodoni-moda'
 import './app.css'
 import App from './App.svelte'
