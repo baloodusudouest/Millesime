@@ -26,6 +26,9 @@ class Config:
     seuil_doute: float
     seuil_suspect: float
     synchro_minutes: int
+    # Adresse d'Immich pour les liens ouverts dans le navigateur (différente de l'adresse interne
+    # au réseau Docker). Vide : le navigateur ouvre Immich sur la même machine que Millésime, port 2283.
+    immich_lien: str = ""
 
     @classmethod
     def depuis_env(cls) -> "Config":
@@ -52,4 +55,5 @@ class Config:
             seuil_doute=float(_env("MILLESIME_SEUIL_DOUTE", "4")),
             seuil_suspect=float(_env("MILLESIME_SEUIL_SUSPECT", "12")),
             synchro_minutes=int(_env("MILLESIME_SYNCHRO_MINUTES", "60")),
+            immich_lien=_env("MILLESIME_IMMICH_LIEN").rstrip("/"),
         )

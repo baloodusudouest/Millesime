@@ -1,5 +1,5 @@
 <script>
-  import { api, apercu, visage } from '../lib/api.svelte.js'
+  import { api, apercu, versImmich, visage } from '../lib/api.svelte.js'
   import Frise from '../components/Frise.svelte'
   import NommerGroupe from '../components/NommerGroupe.svelte'
   import Visionneuse from '../components/Visionneuse.svelte'
@@ -219,7 +219,7 @@
               {:else}
                 <p class="font-medium">Détecté par Immich, non attribué</p>
                 <p class="secondaire">Immich l'a repéré sans le rattacher à une personne. Dans Immich, il apparaît avec le crayon
-                  « Modifier les visages » de la photo. <a class="lien" href={s.lien_immich} target="_blank" rel="noopener">Ouvrir la photo dans Immich</a></p>
+                  « Modifier les visages » de la photo. <a class="lien" href={versImmich(s.lien_immich)} target="_blank" rel="noopener">Ouvrir la photo dans Immich</a></p>
               {/if}
             </div>
           </div>
