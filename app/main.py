@@ -143,6 +143,11 @@ def valider(asset_id: str, corps: dict = Body(...)):
     return m().valider(asset_id, corps.get("annee"), corps.get("marge", 1))
 
 
+@app.post("/api/scans/{asset_id}/actualiser")
+def actualiser(asset_id: str):
+    return m().actualiser_scan(asset_id)
+
+
 @app.post("/api/scans/{asset_id}/plusieurs")
 def plusieurs(asset_id: str):
     return m().plusieurs_annees(asset_id)

@@ -63,7 +63,7 @@
     </div>
     {#if compact}
       <p class="secondaire self-center text-sm">
-        {groupe.visages ? `Groupe Immich de ${pluriel(groupe.visages, 'visage')}` : 'Groupe Immich sans nom'}
+        {groupe.visages ? `Groupe Immich de ${pluriel(groupe.visages, 'visage')}` : 'Groupe Immich sans nom'}{groupe.masque ? ', personne masquée dans Immich' : ''}
         {#if groupe.lien_immich}· <a class="lien" href={groupe.lien_immich} target="_blank" rel="noopener">voir dans Immich</a>{/if}
       </p>
     {/if}

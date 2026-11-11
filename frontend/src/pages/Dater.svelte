@@ -14,11 +14,31 @@
   let occupe = $state(false)
   let erreur = $state('')
   let message = $state(null)   // { texte, journal }
+  // libellé court sur la photo pour un visage sans nom
+  const ETATS = { non_attribue: 'non attribué', masque: 'personne masquée', supprime: 'retiré d’Immich', groupe_sans_nom: 'sans nom' }
   let suggestions = $state([])
   let grand = $state(null)
   let zoneNommer = $state(null)
 
   api.get('/api/nommer/suggestions').then((r) => (suggestions = r)).catch(() => {})
+
+  let relecture = $state(false)
+  async function relire() {
+    relecture = true
+    erreur = ''
+    try {
+      const r = await api.post(`/api/scans/${s.asset_id}/actualiser`)
+      const parts = []
+      if (r.nouveaux) parts.push(`${r.nouveaux} nouveau${r.nouveaux > 1 ? 'x' : ''} visage${r.nouveaux > 1 ? 's' : ''}`)
+      if (r.changes) parts.push(`${r.changes} visage${r.changes > 1 ? 's' : ''} mis à jour`)
+      if (r.retires) parts.push(`${r.retires} retiré${r.retires > 1 ? 's' : ''}`)
+      let texte = parts.length ? `Photo relue : ${parts.join(', ')}.` : 'Photo relue : rien n’a changé dans Immich.'
+      if (r.a_calculer) texte += ` ${r.a_calculer} visage${r.a_calculer > 1 ? 's' : ''} à analyser sur le PC.`
+      message = { texte }
+      s = await api.get(`/api/scans/${s.asset_id}`)
+    } catch (e) { erreur = e.message }
+    relecture = false
+  }
 
   async function apresNommage(m) {
     if (m) message = m
@@ -86,7 +106,7 @@
 {#if message}
   <div class="surface mb-4 flex items-center gap-3 p-3" role="status">
     <p class="flex-1 text-sm">{message.texte}</p>
-    <button class="bouton" onclick={annuler}>Annuler</button>
+    {#if message.journal}<button class="bouton" onclick={annuler}>Annuler</button>{/if}
     <button class="secondaire px-2" onclick={() => (message = null)} aria-label="Fermer">✕</button>
   </div>
 {/if}
@@ -116,7 +136,7 @@
         <div class="absolute rounded-sm border-2 {iv ? 'border-or' : 'border-etiquette/50 border-dashed'}"
              style="left:{(100 * v.x1) / v.img_w}%; top:{(100 * v.y1) / v.img_h}%; width:{(100 * (v.x2 - v.x1)) / v.img_w}%; height:{(100 * (v.y2 - v.y1)) / v.img_h}%">
           <span class="absolute left-0 top-full mt-0.5 whitespace-nowrap rounded bg-verre/85 px-1 text-[11px]">
-            {v.person_nom || 'sans nom'}{iv ? ` · ${Math.round(iv.age)} ans` : ''}
+            {v.person_nom || ETATS[v.etat] || 'sans nom'}{iv ? ` · ${Math.round(iv.age)} ans` : ''}
           </span>
         </div>
       {/each}
@@ -151,6 +171,8 @@
           <button class="bouton" onclick={passer} disabled={occupe || liste.length < 2}>Passer</button>
           <button class="bouton" onclick={plusieurs} disabled={occupe}>Plusieurs années</button>
         </div>
+        <button class="bouton" onclick={relire} disabled={relecture}>{relecture ? 'Relecture…' : 'Relire la photo dans Immich'}</button>
+        <p class="secondaire text-center text-xs">Après avoir nommé ou ajouté un visage dans Immich.</p>
       </div>
 
       <dl class="mt-6 space-y-2 text-sm">
@@ -185,13 +207,21 @@
           <NommerGroupe groupe={g} {suggestions} compact onfait={apresNommage}
                         onvoir={(e) => (grand = { asset: e.asset_id, face: e.face_id })} />
         {/each}
-        {#each s.sans_personne as fid (fid)}
+        {#each s.sans_personne as x (x.face_id)}
           <div class="surface flex gap-3 p-3">
-            <button class="shrink-0 rounded-md" onclick={() => (grand = { asset: s.asset_id, face: fid })} aria-label="Voir la photo entière">
-              <img src={visage(s.asset_id, fid)} alt="" width="64" height="64" class="aspect-square w-16 rounded-md object-cover" />
+            <button class="shrink-0 rounded-md" onclick={() => (grand = { asset: s.asset_id, face: x.face_id })} aria-label="Voir la photo entière">
+              <img src={visage(s.asset_id, x.face_id)} alt="" width="64" height="64" class="aspect-square w-16 rounded-md object-cover" />
             </button>
-            <p class="secondaire self-center text-sm">Immich n'a pas rattaché ce visage à un groupe : on ne peut pas le nommer
-              d'ici. <a class="lien" href={s.lien_immich} target="_blank" rel="noopener">L'assigner dans Immich</a></p>
+            <div class="self-center text-sm">
+              {#if x.etat === 'supprime'}
+                <p class="font-medium">Retiré d'Immich</p>
+                <p class="secondaire">Ce visage n'existe plus dans Immich. Il disparaîtra d'ici à la prochaine synchronisation.</p>
+              {:else}
+                <p class="font-medium">Détecté par Immich, non attribué</p>
+                <p class="secondaire">Immich l'a repéré sans le rattacher à une personne. Dans Immich, il apparaît avec le crayon
+                  « Modifier les visages » de la photo. <a class="lien" href={s.lien_immich} target="_blank" rel="noopener">Ouvrir la photo dans Immich</a></p>
+              {/if}
+            </div>
           </div>
         {/each}
       </div>
