@@ -181,3 +181,13 @@ NAS ┌────────────────────────�
   - les noms se donnent d'abord dans Immich.
 
 **Première étape** : compter le stock (`mesure/compter.py`).
+
+## 11. Taille du stock (11/11/2026, `compter.py`)
+
+- **398 scans « Non datée »**, dont 357 (89 %) ont au moins un visage détecté.
+- **144 scans (36 %) sont datables aujourd'hui**, c'est-à-dire qu'ils ont au moins un visage nommé avec une date de naissance.
+- 787 visages, dont 167 nommés ; 165 de ces visages nommés ont une date de naissance.
+- 64 groupes de visages sans nom. Les 10 plus fréquents réunissent 141 visages : 31, 22, 17, 16, 14, 9, 9, 8, 8 et 7.
+- Le calcul MiVOLO de tout le stock prend environ **8 minutes** sur le PC.
+
+**Conséquence** : le stock est petit et le calcul court. Cela confirme le président du conseil : un script ponctuel sur le PC suffit, sans file de tâches ni alerte. Le levier principal est de nommer la dizaine de groupes de visages les plus fréquents dans Immich, ce qui peut faire passer la couverture bien au-delà de 36 %.
