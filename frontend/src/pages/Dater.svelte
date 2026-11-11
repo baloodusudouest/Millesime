@@ -1,6 +1,8 @@
 <script>
   import { api, apercu, visage } from '../lib/api.svelte.js'
   import Frise from '../components/Frise.svelte'
+  import NommerGroupe from '../components/NommerGroupe.svelte'
+  import Visionneuse from '../components/Visionneuse.svelte'
 
   let { statut } = $props()
   let liste = $state([])
@@ -12,6 +14,17 @@
   let occupe = $state(false)
   let erreur = $state('')
   let message = $state(null)   // { texte, journal }
+  let suggestions = $state([])
+  let grand = $state(null)
+  let zoneNommer = $state(null)
+
+  api.get('/api/nommer/suggestions').then((r) => (suggestions = r)).catch(() => {})
+
+  async function apresNommage(m) {
+    if (m) message = m
+    suggestions = await api.get('/api/nommer/suggestions').catch(() => suggestions)
+    s = await api.get(`/api/scans/${s.asset_id}`)
+  }
 
   async function chargerListe() {
     erreur = ''
@@ -150,9 +163,10 @@
           <div class="flex justify-between gap-3"><dt class="secondaire">Même envoi</dt>
             <dd>{s.details.voisins.min}–{s.details.voisins.max} <span class="secondaire">({s.details.voisins.n} déjà datées)</span></dd></div>
         {/if}
-        {#if s.details.sans_nom}
+        {#if s.a_nommer.length || s.sans_personne.length}
           <div class="flex justify-between gap-3"><dt class="secondaire">Visages sans nom</dt>
-            <dd><a class="lien" href="#nommer">{s.details.sans_nom} à nommer</a></dd></div>
+            <dd><button class="lien" onclick={() => zoneNommer?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              {s.a_nommer.length + s.sans_personne.length} à nommer</button></dd></div>
         {/if}
         {#if s.details.sans_naissance}
           <div class="flex justify-between gap-3"><dt class="secondaire">Sans date de naissance</dt>
@@ -161,6 +175,28 @@
       </dl>
     </section>
   </div>
+
+  {#if s.a_nommer.length || s.sans_personne.length}
+    <section bind:this={zoneNommer} class="mt-8 scroll-mt-20" aria-labelledby="titre-nommer">
+      <h2 id="titre-nommer" class="font-semibold">À nommer sur cette photo</h2>
+      <p class="secondaire text-sm">Un nom donné ici vaut pour tout le groupe dans Immich, et le visage pourra servir à dater dès qu'il a une date de naissance.</p>
+      <div class="mt-3 grid items-start gap-3 lg:grid-cols-2">
+        {#each s.a_nommer as g (g.person_id)}
+          <NommerGroupe groupe={g} {suggestions} compact onfait={apresNommage}
+                        onvoir={(e) => (grand = { asset: e.asset_id, face: e.face_id })} />
+        {/each}
+        {#each s.sans_personne as fid (fid)}
+          <div class="surface flex gap-3 p-3">
+            <button class="shrink-0 rounded-md" onclick={() => (grand = { asset: s.asset_id, face: fid })} aria-label="Voir la photo entière">
+              <img src={visage(s.asset_id, fid)} alt="" width="64" height="64" class="aspect-square w-16 rounded-md object-cover" />
+            </button>
+            <p class="secondaire self-center text-sm">Immich n'a pas rattaché ce visage à un groupe : on ne peut pas le nommer
+              d'ici. <a class="lien" href={s.lien_immich} target="_blank" rel="noopener">L'assigner dans Immich</a></p>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   {#if personnes.length}
     <section class="mt-8" aria-labelledby="titre-frises">
@@ -174,3 +210,5 @@
 {:else}
   <p class="secondaire">Chargement…</p>
 {/if}
+
+{#if grand}<Visionneuse asset={grand.asset} face={grand.face} fermer={() => (grand = null)} />{/if}

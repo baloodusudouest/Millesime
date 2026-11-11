@@ -282,3 +282,18 @@ def test_annuler_un_nommage_et_boite(env):
     assert E["personnes"]["inconnu2"]["name"] == ""
     b = client.get("/api/boite/nd0/nd0-f0").json()
     assert 0 < b["x"] < 1 and 0 < b["l"] < 1 and b["nom"] == "Julien B"
+
+
+def test_nommer_depuis_la_photo(env):
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    s = client.get("/api/scans/nd-sans").json()
+    ids = {g["person_id"] for g in s["a_nommer"]}
+    assert ids == {"inconnu1", "inconnu2"}
+    g1 = next(g for g in s["a_nommer"] if g["person_id"] == "inconnu1")
+    assert g1["visages"] >= 2 and g1["exemples"][0]["asset_id"] == "nd-sans"
+    assert len(s["sans_personne"]) == 1 and s["lien_immich"].endswith("/photos/nd-sans")
+    client.post("/api/nommer/inconnu2", json={"nom": "Lucie MARTIN"})
+    s = client.get("/api/scans/nd-sans").json()
+    assert {g["person_id"] for g in s["a_nommer"]} == {"inconnu1"}

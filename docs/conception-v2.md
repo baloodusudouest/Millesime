@@ -218,3 +218,9 @@ Julien a choisi la conception v2 complète, avec l'écran Nommer **sans fusion**
   - Annuler recrée une personne et lui rend ces visages un par un (`PUT /faces/{id}`) ;
   - le nommage simple devient lui aussi annulable.
 - **Photo en grand** : un visage touché ouvre la photo entière, avec le visage encadré.
+
+## 14. Version 1.2 (11/11/2026)
+
+- **Nommer depuis l'écran Dater** : sous la photo, la section « À nommer sur cette photo » montre chaque groupe sans nom, avec la vignette du visage et le champ de nom (suggestions d'Immich et rattachement annulable). Le lien « N à nommer » y mène directement. Les visages qu'Immich n'a rattachés à aucun groupe renvoient vers la photo dans Immich.
+- **Lien direct vers un groupe** : `#nommer/<id>` ouvre l'écran Nommer avec ce groupe en tête et encadré.
+- Le composant `NommerGroupe` est partagé entre les deux écrans.
