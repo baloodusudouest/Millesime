@@ -224,3 +224,13 @@ Julien a choisi la conception v2 complète, avec l'écran Nommer **sans fusion**
 - **Nommer depuis l'écran Dater** : sous la photo, la section « À nommer sur cette photo » montre chaque groupe sans nom, avec la vignette du visage et le champ de nom (suggestions d'Immich et rattachement annulable). Le lien « N à nommer » y mène directement. Les visages qu'Immich n'a rattachés à aucun groupe renvoient vers la photo dans Immich.
 - **Lien direct vers un groupe** : `#nommer/<id>` ouvre l'écran Nommer avec ce groupe en tête et encadré.
 - Le composant `NommerGroupe` est partagé entre les deux écrans.
+
+## 15. Version 1.3 (11/11/2026)
+
+- **État de chaque visage**, vérifié en direct auprès d'Immich quand la photo s'ouvre, sans modifier la base :
+  - « non attribué » : détecté par Immich mais rattaché à aucune personne ; visible dans Immich avec « Modifier les visages » ;
+  - « personne masquée » : groupe masqué dans Immich ;
+  - « retiré d'Immich » : supprimé depuis la dernière synchronisation.
+
+  Un groupe dont les visages ont tous disparu de la photo n'est plus proposé à nommer.
+- **« Relire la photo dans Immich »** : après avoir nommé ou ajouté un visage dans Immich, Millésime relit aussitôt les visages et les noms de la photo et recalcule la proposition. Les frises concernées sont rafraîchies, et un nouveau visage avec une date de naissance part au calcul sur le PC.

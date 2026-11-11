@@ -127,14 +127,15 @@ class Millesime:
             p = f.get("person") or {}
             ids.add(f["id"])
             self.base.executer("""
-                INSERT INTO visages(face_id, asset_id, person_id, person_nom, naissance, x1, y1, x2, y2, img_w, img_h)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                INSERT INTO visages(face_id, asset_id, person_id, person_nom, naissance, x1, y1, x2, y2, img_w, img_h,
+                                    person_masque)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(face_id) DO UPDATE SET person_id=excluded.person_id, person_nom=excluded.person_nom,
                     naissance=excluded.naissance, x1=excluded.x1, y1=excluded.y1, x2=excluded.x2, y2=excluded.y2,
-                    img_w=excluded.img_w, img_h=excluded.img_h""",
+                    img_w=excluded.img_w, img_h=excluded.img_h, person_masque=excluded.person_masque""",
                 f["id"], asset_id, p.get("id"), p.get("name") or None, (p.get("birthDate") or None),
                 f["boundingBoxX1"], f["boundingBoxY1"], f["boundingBoxX2"], f["boundingBoxY2"],
-                f.get("imageWidth"), f.get("imageHeight"))
+                f.get("imageWidth"), f.get("imageHeight"), 1 if p.get("isHidden") else 0)
         for r in self.base.tous("SELECT face_id FROM visages WHERE asset_id=?", asset_id):
             if r["face_id"] not in ids:
                 self.base.executer("DELETE FROM visages WHERE face_id=?", r["face_id"])
@@ -247,7 +248,26 @@ class Millesime:
             raise ErreurMillesime("Scan inconnu.")
         s["details"] = json.loads(s["details"] or "{}")
         s["visages"] = self.base.tous("SELECT face_id, person_id, person_nom, naissance, x1, y1, x2, y2, img_w, img_h, "
-                                      "age_visage, age_corps FROM visages WHERE asset_id=?", asset_id)
+                                      "age_visage, age_corps, person_masque FROM visages WHERE asset_id=?", asset_id)
+        # État de chaque visage, vérifié en direct auprès d'Immich (sans modifier la base : la synchro s'en charge)
+        try:
+            live = {f["id"]: f for f in self.immich.visages(asset_id)}
+        except ErreurImmich:
+            live = None
+        for v in s["visages"]:
+            f = live.get(v["face_id"]) if live is not None else None
+            p = (f or {}).get("person") or {}
+            if live is not None and f is None:
+                v["etat"] = "supprime"        # n'existe plus dans Immich depuis la dernière synchro
+            elif not (p.get("id") if f else v["person_id"]):
+                v["etat"] = "non_attribue"    # détecté par Immich, rattaché à aucune personne
+            elif (p.get("isHidden") if f else v["person_masque"]):
+                v["etat"] = "masque"          # personne masquée dans Immich
+            elif not (p.get("name") if f else v["person_nom"]):
+                v["etat"] = "groupe_sans_nom"
+            else:
+                v["etat"] = "nomme"
+        etats = {v["face_id"]: v["etat"] for v in s["visages"]}
         s["lien_immich"] = f"{self.cfg.immich_url}/photos/{asset_id}"
         # groupes sans nom présents sur la photo, avec leur nombre total de visages (pour les nommer sur place)
         s["a_nommer"] = self.base.tous(f"""
@@ -259,8 +279,40 @@ class Millesime:
         for g in s["a_nommer"]:
             g["exemples"] = [{"face_id": g["face_id"], "asset_id": asset_id}]
             g["lien_immich"] = f"{self.cfg.immich_url}/people/{g['person_id']}"
-        s["sans_personne"] = [v["face_id"] for v in s["visages"] if not v["person_id"]]
+        # un groupe dont tous les visages de la photo ont disparu d'Immich n'est plus à nommer ici
+        s["a_nommer"] = [g for g in s["a_nommer"] if any(
+            etats.get(v["face_id"]) in ("groupe_sans_nom", "masque") for v in s["visages"] if v["person_id"] == g["person_id"])]
+        for g in s["a_nommer"]:
+            g["masque"] = any(etats.get(v["face_id"]) == "masque" for v in s["visages"] if v["person_id"] == g["person_id"])
+        s["sans_personne"] = [{"face_id": v["face_id"], "etat": v["etat"]} for v in s["visages"]
+                              if v["etat"] in ("non_attribue", "supprime")]
         return s
+
+    def actualiser_scan(self, asset_id: str) -> dict:
+        """Relit tout de suite dans Immich les visages et les noms d'une photo, puis recalcule sa proposition."""
+        s = self.base.un("SELECT * FROM scans WHERE asset_id=?", asset_id)
+        if not s:
+            raise ErreurMillesime("Scan inconnu.")
+        avant = {v["face_id"]: (v["person_id"], v["person_nom"]) for v in
+                 self.base.tous("SELECT face_id, person_id, person_nom FROM visages WHERE asset_id=?", asset_id)}
+        self.visages_immich.pop(asset_id, None)
+        self._synchro_visages(asset_id)
+        apres = {v["face_id"]: (v["person_id"], v["person_nom"]) for v in
+                 self.base.tous("SELECT face_id, person_id, person_nom FROM visages WHERE asset_id=?", asset_id)}
+        personnes = {p for p, _ in list(avant.values()) + list(apres.values()) if p}
+        for pid in personnes:
+            self.base.executer("DELETE FROM frises WHERE person_id=?", pid)
+        if s["type"] == "non_datee" and s["statut"] not in ("validee", "plusieurs"):
+            version, p = est.calibrage_courant(self.base)
+            r = est.proposer(self.base, s, version, p, self.cfg.seuil_doute)
+            self.base.executer("UPDATE scans SET statut=?, annee_proposee=?, marge=?, raison=?, details=? WHERE asset_id=?",
+                               r["statut"], r["annee_proposee"], r["marge"], r["raison"], json.dumps(r["details"]), asset_id)
+        self.suggestions_cache = None
+        nouveaux = [f for f in apres if f not in avant]
+        changes = [f for f in apres if f in avant and avant[f] != apres[f]]
+        return {"nouveaux": len(nouveaux), "changes": len(changes), "retires": len([f for f in avant if f not in apres]),
+                "a_calculer": self.base.valeur("SELECT COUNT(*) FROM visages WHERE asset_id=? AND naissance IS NOT NULL "
+                                               "AND age_visage IS NULL", asset_id)}
 
     # ------------------------------------------------------------------ écriture
     def _album_par_nom(self, nom: str) -> dict | None:

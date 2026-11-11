@@ -67,6 +67,10 @@ class Base:
         self.verrou = threading.RLock()
         with self.verrou:
             self.cx.executescript(SCHEMA)
+            # migrations légères (colonnes ajoutées après la 1.0)
+            cols = {r[1] for r in self.cx.execute("PRAGMA table_info(visages)")}
+            if "person_masque" not in cols:
+                self.cx.execute("ALTER TABLE visages ADD COLUMN person_masque INTEGER DEFAULT 0")
 
     @contextmanager
     def transaction(self):

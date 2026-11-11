@@ -293,7 +293,42 @@ def test_nommer_depuis_la_photo(env):
     assert ids == {"inconnu1", "inconnu2"}
     g1 = next(g for g in s["a_nommer"] if g["person_id"] == "inconnu1")
     assert g1["visages"] >= 2 and g1["exemples"][0]["asset_id"] == "nd-sans"
-    assert len(s["sans_personne"]) == 1 and s["lien_immich"].endswith("/photos/nd-sans")
+    assert [x["etat"] for x in s["sans_personne"]] == ["non_attribue"] and s["lien_immich"].endswith("/photos/nd-sans")
     client.post("/api/nommer/inconnu2", json={"nom": "Lucie MARTIN"})
     s = client.get("/api/scans/nd-sans").json()
     assert {g["person_id"] for g in s["a_nommer"]} == {"inconnu1"}
+
+
+def test_etat_des_visages(env):
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    # personne masquée dans Immich, et visage supprimé dans Immich depuis la synchro
+    E["personnes"]["inconnu2"]["isHidden"] = True
+    E["assets"]["nd-sans"]["faces"] = [f for f in E["assets"]["nd-sans"]["faces"] if f["id"] != "nd-sans-f0"]
+    s = client.get("/api/scans/nd-sans").json()
+    etats = {v["face_id"]: v["etat"] for v in s["visages"]}
+    assert etats == {"nd-sans-f0": "supprime", "nd-sans-f1": "masque", "nd-sans-f2": "non_attribue"}
+    assert next(g for g in s["a_nommer"] if g["person_id"] == "inconnu2")["masque"] is True
+    assert "inconnu1" not in {g["person_id"] for g in s["a_nommer"]}     # son seul visage ici a disparu
+    assert {x["etat"] for x in s["sans_personne"]} == {"supprime", "non_attribue"}
+    s2 = client.get("/api/scans/nd0").json()
+    assert {v["etat"] for v in s2["visages"]} == {"nomme"}
+
+
+def test_relire_une_photo(env):
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    # dans Immich : le visage non attribué de nd-sans est rattaché à Julien, et le groupe inconnu2 est nommé
+    f2 = next(f for f in E["assets"]["nd-sans"]["faces"] if f["id"] == "nd-sans-f2")
+    f2["person"] = E["personnes"]["julien"]
+    E["personnes"]["inconnu2"]["name"] = "Lucie MARTIN"
+    s = client.get("/api/scans/nd-sans").json()
+    assert s["statut"] == "a_trancher"
+    r = client.post("/api/scans/nd-sans/actualiser").json()
+    assert r["changes"] == 2 and r["a_calculer"] == 1
+    s = client.get("/api/scans/nd-sans").json()
+    noms = {v["face_id"]: v["person_nom"] for v in s["visages"]}
+    assert noms["nd-sans-f2"] == "Julien B" and noms["nd-sans-f1"] == "Lucie MARTIN"
+    assert s["statut"] == "a_analyser"            # le visage de Julien attend le calcul sur le PC
