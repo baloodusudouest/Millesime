@@ -38,6 +38,16 @@ class Config:
         cle = _env("MILLESIME_IMMICH_CLE")
         if not cle:
             raise RuntimeError("Variable MILLESIME_IMMICH_CLE absente : clé API Immich dédiée à Millésime.")
+        # 1.5.1 : les noms de tags et d'albums sont propres à chaque photothèque. Ils ne sont plus
+        # écrits dans le code (dépôt public) : la stack les donne, et Millésime refuse de démarrer
+        # sans eux plutôt que d'écrire sous un nom par défaut.
+        noms = {v: _env(v) for v in ("MILLESIME_TAG_PREFIXE", "MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM")}
+        absents = [v for v, x in noms.items() if not x]
+        if absents:
+            raise RuntimeError("Variable(s) absente(s) : " + ", ".join(absents) + ". À définir dans la stack avec les noms "
+                               "réels des tags et des albums d'Immich (voir le README).")
+        if "{annee}" not in noms["MILLESIME_MODELE_ALBUM"]:
+            raise RuntimeError("MILLESIME_MODELE_ALBUM doit contenir {annee}, par exemple « {annee} Numérisation ».")
         etat = Path(_env("MILLESIME_ETAT", "/state"))
         etat.mkdir(parents=True, exist_ok=True)
         return cls(
@@ -46,11 +56,11 @@ class Config:
             mot_de_passe=mdp,
             jeton_calcul=_env("MILLESIME_JETON_CALCUL"),
             jeton_carnet=_env("MILLESIME_JETON_CARNET"),
-            tag_prefixe=_env("MILLESIME_TAG_PREFIXE", "Numérisation"),
+            tag_prefixe=noms["MILLESIME_TAG_PREFIXE"],
             tag_non_datee=_env("MILLESIME_TAG_NON_DATEE", "Non datée"),
             tag_estimee=_env("MILLESIME_TAG_ESTIMEE", "Date estimée"),
-            album_non_datees=_env("MILLESIME_ALBUM_NON_DATEES", "Non datées Numérisation"),
-            modele_album=_env("MILLESIME_MODELE_ALBUM", "{annee} Numérisation"),
+            album_non_datees=noms["MILLESIME_ALBUM_NON_DATEES"],
+            modele_album=noms["MILLESIME_MODELE_ALBUM"],
             etat_dir=etat,
             seuil_doute=float(_env("MILLESIME_SEUIL_DOUTE", "4")),
             seuil_suspect=float(_env("MILLESIME_SEUIL_SUSPECT", "12")),

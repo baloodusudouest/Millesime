@@ -49,7 +49,7 @@ from PIL import Image
 # --------------------------------------------------------------------------
 IMMICH_URL = os.environ.get("IMMICH_URL", "http://immich_server:2283").rstrip("/")
 API_KEY = os.environ.get("IMMICH_API_KEY", "")
-TAG_PREFIXE = os.environ.get("TAG_PREFIXE", "Numérisation")
+TAG_PREFIXE = os.environ.get("TAG_PREFIXE", "").strip()
 TAG_NON_DATEE = os.environ.get("TAG_NON_DATEE", "Non datée")
 MAX_SCANS = int(os.environ.get("MAX_SCANS", "300"))
 REFS_PAR_PERSONNE = int(os.environ.get("REFS_PAR_PERSONNE", "15"))
@@ -580,6 +580,9 @@ def verdict(erreur: float, methode: str) -> str:
 
 
 def main() -> int:
+    if not TAG_PREFIXE:
+        print("Variable TAG_PREFIXE absente : le préfixe réel des tags de numérisation dans Immich.", flush=True)
+        return 2
     OUT.mkdir(parents=True, exist_ok=True)
     if (OUT / "rapport.md").exists() and not FORCER:
         print(f"Test déjà fait : {OUT / 'rapport.md'} existe. "
