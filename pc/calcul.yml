@@ -1,5 +1,5 @@
 # =============================================================================
-# Millésime — calculateur sur le PC (Docker Desktop), en veille
+# Millésime — calculateur sur le PC (Docker Desktop), toujours prêt
 #
 #   Une seule fois, dans C:\millesime :  docker compose -f calcul.yml up -d
 #
@@ -7,8 +7,8 @@
 #   travail à Millésime (NAS) toutes les 5 minutes et calcule dès qu'un visage attend.
 #   Docker Desktop le relance à chaque ouverture. Rien n'est écrit dans Immich.
 #
-#   Arrêter la veille :  docker compose -f calcul.yml down
-#   Une seule passe sans veille :  docker compose -f calcul.yml run --rm -e VEILLE=0 millesime-calcul
+#   Arrêter le calculateur :  docker compose -f calcul.yml down
+#   Une seule passe puis arrêt :  docker compose -f calcul.yml run --rm -e VEILLE=0 millesime-calcul
 # =============================================================================
 
 services:
@@ -18,6 +18,7 @@ services:
     pull_policy: always                       # dernière version à chaque (re)lancement par compose
     command: ["python", "/app/calcul.py"]
     environment:
+      - MACHINE=${COMPUTERNAME:-}          # nom du PC Windows affiché dans Millésime
       - TZ=Europe/Paris
       - MILLESIME_URL=${MILLESIME_URL:-http://192.168.1.10:8098}
       - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}

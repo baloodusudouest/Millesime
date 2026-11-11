@@ -18,8 +18,9 @@
 
 {#if a?.pc}
   <p class="mt-3 text-sm {a.pc.actif ? 'text-or' : 'secondaire'}">
-    {#if a.pc.actif && a.pc.veille}Le PC est en veille{a.pc.machine ? ` (${a.pc.machine})` : ''} : dernière demande il y a {a.pc.il_y_a_min} min.
-    {:else}Dernier contact du PC : {dateCourte(a.pc.le)}. Ouvre Docker Desktop pour relancer la veille.{/if}
+    {#if a.pc.actif && total}PC connecté{a.pc.machine ? ` (${a.pc.machine})` : ''} : calcul en cours, dernier contact il y a {a.pc.il_y_a_min} min.
+    {:else if a.pc.actif}PC connecté{a.pc.machine ? ` (${a.pc.machine})` : ''} : rien à calculer, il revérifie toutes les 5 min (dernier contact il y a {a.pc.il_y_a_min} min).
+    {:else}PC déconnecté depuis {dateCourte(a.pc.le)} : allume le PC et ouvre Docker Desktop.{/if}
   </p>
 {/if}
 
@@ -37,7 +38,7 @@
     <pre class="surface mt-2 overflow-x-auto p-3 text-sm">MILLESIME_URL={adresse}
 MILLESIME_JETON_CALCUL=…   (la valeur de la stack homelab)</pre>
   </li>
-  <li>Dans un terminal (celui de Docker Desktop convient), télécharger le fichier du calculateur et lancer la veille :
+  <li>Dans un terminal (celui de Docker Desktop convient), télécharger le fichier du calculateur et le démarrer :
     <pre class="surface mt-2 overflow-x-auto p-3 text-sm">cd C:\millesime
 curl.exe -L -o calcul.yml https://raw.githubusercontent.com/baloodusudouest/Millesime/main/pc/calcul.yml
 docker compose -f calcul.yml up -d</pre>
@@ -45,9 +46,9 @@ docker compose -f calcul.yml up -d</pre>
 </ol>
 
 <h2 class="mt-8 font-semibold">Ensuite</h2>
-<p class="mt-2">Il suffit d'ouvrir Docker Desktop : la veille reprend toute seule. Dans Docker Desktop, le conteneur
+<p class="mt-2">Il suffit d'ouvrir Docker Desktop : le calculateur redémarre tout seul. Dans Docker Desktop, le conteneur
   <code>millesime_calcul</code> montre ce qu'il fait (onglet Logs).</p>
 <ul class="secondaire mt-2 list-disc space-y-1 pl-5 text-sm">
-  <li>Arrêter la veille : <code>docker compose -f calcul.yml down</code></li>
+  <li>Arrêter le calculateur : <code>docker compose -f calcul.yml down</code></li>
   <li>Mettre à jour le calculateur : <code>docker compose -f calcul.yml up -d</code> (télécharge la dernière version)</li>
 </ul>
