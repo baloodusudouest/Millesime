@@ -2,7 +2,98 @@
 
 Dater les photos papier numérisées à partir de l'âge des visages qu'elles contiennent, avec Immich, hors ligne.
 
-> **État actuel : test de mesure.** Avant de coder l'appli, on mesure si un modèle d'âge local est assez précis sur les scans pour aider à les dater. La conception et le verdict du conseil sont dans [`docs/conception.md`](docs/conception.md).
+> **Version 1.0** : une appli sur le NAS (écrans, écriture dans Immich) et un calculateur sur le PC (MiVOLO v2). La conception et les verdicts du conseil sont dans [`docs/conception-v2.md`](docs/conception-v2.md). Les deux tests de mesure qui ont précédé l'appli sont décrits plus bas.
+
+## L'appli
+
+| Écran | Rôle |
+|---|---|
+| Accueil | Photos datées / total, choses à faire, précision du calibrage, synchronisation |
+| Dater | Photo et visages, année proposée ± marge, bornes, frise de chaque personne ; Valider, Passer, Plusieurs années |
+| À trancher | Cas douteux : marge trop large, visages en désaccord, aucun visage exploitable |
+| Nommer | Groupes de visages sans nom sur les scans, à nommer dans Immich (jamais de fusion) |
+| À vérifier | Visages dont l'âge estimé contredit l'âge connu, signe d'un groupe mélangé ou d'une naissance fausse |
+| Calcul sur le PC | Mode d'emploi du calculateur et nombre de visages en attente |
+| Journal | Chaque écriture dans Immich, avec Annuler |
+
+**Écriture à la validation** :
+
+- date au 1er juillet de l'année, à 12:00 ;
+- tag `Date estimée/AAAA ±N` ;
+- retrait de l'album « Non datées Numérisation » ;
+- ajout à l'album « AAAA Numérisation », créé si besoin.
+
+Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/…`.
+
+**Indice** : MiVOLO v2 (visage + buste estimé), calibré automatiquement sur les scans datés par tampon.
+
+- Le calibrage est fait par tranche d'âge ; chaque version est conservée, avec sa précision mesurée par validation croisée (plis séparés par lot et par personne).
+- Une date validée ne sert jamais au calibrage.
+- Les bornes sont souples : une contradiction envoie la photo dans « À trancher », au lieu de forcer l'année.
+
+### Installation sur le NAS (stack homelab)
+
+```yaml
+  millesime:
+    image: ghcr.io/baloodusudouest/millesime:${MILLESIME_VERSION:-latest}
+    container_name: millesime
+    depends_on:
+      - immich-server
+    environment:
+      - TZ=${TZ}
+      - MILLESIME_PASSWORD=${CARNET_PASSWORD}
+      - MILLESIME_IMMICH_URL=http://immich_server:2283
+      - MILLESIME_IMMICH_CLE=${MILLESIME_IMMICH_CLE}
+      - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
+      - MILLESIME_JETON_CARNET=${MILLESIME_JETON_CARNET}
+    ports:
+      - "${PORT_MILLESIME:-8098}:8098"
+    volumes:
+      - ${DOCKER_ROOT}/millesime/state:/state
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    restart: unless-stopped
+```
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `MILLESIME_PASSWORD` | — | Mot de passe de l'interface (celui de carnet) |
+| `MILLESIME_IMMICH_URL` | `http://immich_server:2283` | Adresse d'Immich |
+| `MILLESIME_IMMICH_CLE` | — | Clé API Immich dédiée |
+| `MILLESIME_JETON_CALCUL` | — | Jeton partagé avec le calculateur du PC |
+| `MILLESIME_JETON_CARNET` | — | Jeton de `GET /api/etat`, lu par carnet |
+| `MILLESIME_SYNCHRO_MINUTES` | `60` | Fréquence de relecture d'Immich |
+| `MILLESIME_SEUIL_DOUTE` | `4` | Marge (en années) au-delà de laquelle la photo va dans « À trancher » |
+| `MILLESIME_SEUIL_SUSPECT` | `12` | Écart d'âge, en années, qui rend un visage suspect |
+| `MILLESIME_TAG_PREFIXE`, `MILLESIME_TAG_NON_DATEE` | `Numérisation`, `Non datée` | Tags des scans |
+| `MILLESIME_TAG_ESTIMEE` | `Date estimée` | Préfixe du tag écrit à la validation |
+| `MILLESIME_ALBUM_NON_DATEES`, `MILLESIME_MODELE_ALBUM` | `Non datées Numérisation`, `{annee} Numérisation` | Albums |
+
+La clé API Immich doit avoir ces permissions :
+
+- `asset.read`, `asset.view` et `asset.update` ;
+- `album.read`, `album.create`, `albumAsset.create` et `albumAsset.delete` ;
+- `tag.read`, `tag.create` et `tag.asset` ;
+- `face.read`, `person.read` et `person.update`.
+
+Le plus simple est de créer une clé dédiée avec toutes les permissions.
+
+### Calculateur sur le PC
+
+Dans `C:\millesime`, sur un PC avec Docker Desktop :
+
+```powershell
+curl.exe -L -o calcul.yml https://raw.githubusercontent.com/baloodusudouest/Millesime/main/pc/calcul.yml
+# Ajouter au fichier .env : MILLESIME_URL=http://192.168.1.10:8098 et MILLESIME_JETON_CALCUL=<même valeur que la stack>
+docker compose -f calcul.yml up
+```
+
+Le calculateur demande les visages en attente à Millésime. Il télécharge les aperçus par Millésime, si bien que la clé Immich reste sur le NAS. Il renvoie ensuite les âges, puis s'arrête.
+
+### API pour les autres applis
+
+- `GET /api/etat` (Bearer `MILLESIME_JETON_CARNET`) renvoie `a_analyser`, `a_dater`, `a_trancher`, `a_nommer`, `validees`, `sans_naissance` (personnes nommées sans date de naissance) et `message` (« allume le PC… »).
+- `GET /api/ha/etat` est réservé à l'intégration Home Assistant, à venir (501).
 
 ## Test n°2 sur le PC (MiVOLO + vision locale)
 
@@ -130,8 +221,9 @@ Aucun modèle n'est inclus dans les images : ils sont téléchargés au premier 
 ## Développement
 
 ```bash
-pip install -r requirements-dev.txt
-python -m pytest -q    # tests contre un faux Immich (tests/faux_immich.py)
+pip install -r requirements-dev.txt uvicorn
+python -m pytest -q          # appli et tests de mesure, contre de faux Immich et Ollama
+cd frontend && npm ci && npx vite build
 ```
 
 GitHub Actions lance les tests, dont un passage avec le vrai modèle MiVOLO. Il publie ensuite deux images :

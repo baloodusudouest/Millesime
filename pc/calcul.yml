@@ -1,0 +1,23 @@
+# =============================================================================
+# Millésime — calculateur à lancer sur le PC (Docker Desktop)
+#
+#   Dans C:\millesime : docker compose -f calcul.yml up
+#   Le calculateur analyse les visages en attente, envoie les âges à Millésime
+#   (NAS) puis s'arrête tout seul. Rien n'est écrit dans Immich.
+# =============================================================================
+
+services:
+  millesime-calcul:
+    image: ghcr.io/baloodusudouest/millesime:calcul
+    container_name: millesime_calcul
+    pull_policy: always                       # toujours la dernière version
+    command: ["python", "/app/calcul.py"]
+    environment:
+      - TZ=Europe/Paris
+      - MILLESIME_URL=${MILLESIME_URL:-http://192.168.1.10:8098}
+      - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
+      - MIVOLO_CORPS=1
+      - THREADS=${THREADS:-auto}
+    volumes:
+      - ./data:/data                          # cache du modèle MiVOLO (téléchargé une fois)
+    restart: "no"

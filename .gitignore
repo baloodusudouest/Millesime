@@ -4,3 +4,5 @@ __pycache__/
 data/
 *.onnx
 *.zip
+frontend/node_modules/
+app/static/

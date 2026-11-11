@@ -3,6 +3,7 @@ name: mesure
 # Tests du test de mesure, puis publication de deux images :
 #   ghcr.io/baloodusudouest/millesime:mesure     (NAS, léger : InsightFace)
 #   ghcr.io/baloodusudouest/millesime:mesure-pc  (PC : InsightFace + MiVOLO v2, vision locale via Ollama)
+#   ghcr.io/baloodusudouest/millesime:calcul     (même image : calculateur de l'appli, mesure/calcul.py)
 # chacune aussi en <tag>-<version> et <tag>-sha-<commit>.
 # Le tag « latest » reste réservé à la future appli.
 
@@ -35,7 +36,7 @@ jobs:
           path: ~/.cache/millesime
           key: modele-genderage-buffalo_l-v0.7
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest -q
+      - run: python -m pytest -q tests/test_mesure.py
 
   tests-pc:
     runs-on: ubuntu-latest
@@ -59,7 +60,7 @@ jobs:
       - name: Tests avec MiVOLO réel
         env:
           MILLESIME_TEST_MIVOLO: "1"
-        run: python -m pytest -q -rs
+        run: python -m pytest -q -rs tests/test_mesure.py
 
   image:
     needs: tests
@@ -119,6 +120,7 @@ jobs:
             ghcr.io/baloodusudouest/millesime:mesure-pc
             ghcr.io/baloodusudouest/millesime:mesure-pc-${{ steps.v.outputs.version }}
             ghcr.io/baloodusudouest/millesime:mesure-pc-sha-${{ github.sha }}
+            ghcr.io/baloodusudouest/millesime:calcul
           cache-from: type=gha,scope=mesure-pc
           cache-to: type=gha,mode=max,scope=mesure-pc
       - name: Contrôle de l'image publiée

@@ -191,3 +191,18 @@ NAS ┌────────────────────────�
 - Le calcul MiVOLO de tout le stock prend environ **8 minutes** sur le PC.
 
 **Conséquence** : le stock est petit et le calcul court. Cela confirme le président du conseil : un script ponctuel sur le PC suffit, sans file de tâches ni alerte. Le levier principal est de nommer la dizaine de groupes de visages les plus fréquents dans Immich, ce qui peut faire passer la couverture bien au-delà de 36 %.
+
+## 12. Version 1.0 construite (11/11/2026)
+
+Julien a choisi la conception v2 complète, avec l'écran Nommer **sans fusion** et l'indice visible. Les points retenus du conseil :
+
+- **pas de fusion** : seulement nommer ou ignorer ; les corrections de groupes se font dans Immich ;
+- **bornes souples** : une contradiction avec la naissance envoie la photo dans « À trancher » ; seule la borne haute (année d'envoi) est appliquée ;
+- **calibrage versionné** : une nouvelle version n'est créée que si les paramètres changent ; la validation croisée sépare les plis par lot **et par personne** ;
+- **visages suspects** : chaque personne est jugée avec un calibrage calculé sans elle, sinon une tranche d'âge dominée par une seule personne absorberait son erreur ;
+- **marge** : 1,28 × l'écart combiné (≈ 80 % de couverture visée), jamais sous l'écart du meilleur visage, puisque les erreurs des visages d'une même photo sont corrélées ;
+- **confirmation** : Valider demande un second geste quand la marge dépasse ±2 ;
+- **bouton « Plusieurs années »** pour les pages d'album à plusieurs tirages ;
+- **journal d'annulation** : date, tag et albums d'origine restaurés.
+
+**Reste à faire côté carnet** : afficher la carte « N visages à analyser, allume le PC » et la liste « Sans anniversaire », à partir de `GET /api/etat`. Millésime expose déjà ces données.
