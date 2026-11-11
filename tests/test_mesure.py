@@ -51,7 +51,7 @@ def lancer(url: str, data: Path, modele: Path, **env_sup) -> subprocess.Complete
     (data / "models").mkdir(parents=True, exist_ok=True)
     if not (data / "models" / "genderage.onnx").exists():
         shutil.copy(modele, data / "models" / "genderage.onnx")
-    env = {**os.environ, "IMMICH_URL": url, "IMMICH_API_KEY": faux_immich.CLE,
+    env = {**os.environ, "TAG_PREFIXE": "Numérisation", "IMMICH_URL": url, "IMMICH_API_KEY": faux_immich.CLE,
            "DATA_DIR": str(data), "MAX_SCANS": "50", "MIVOLO": "0", **env_sup}
     return subprocess.run([sys.executable, str(SCRIPT)], env=env, capture_output=True,
                           text=True, timeout=1200)

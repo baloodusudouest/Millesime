@@ -2,7 +2,7 @@
 
 Dater les photos papier numérisées à partir de l'âge des visages qu'elles contiennent, avec Immich, hors ligne.
 
-> **Version 1.0** : une appli sur le NAS (écrans, écriture dans Immich) et un calculateur sur le PC (MiVOLO v2). La conception et les verdicts du conseil sont dans [`docs/conception-v2.md`](docs/conception-v2.md). Les deux tests de mesure qui ont précédé l'appli sont décrits plus bas.
+> **Version 1.5.1** : une appli sur le NAS (écrans, écriture dans Immich) et un calculateur sur le PC (MiVOLO v2). La conception et les verdicts du conseil sont dans [`docs/conception-v2.md`](docs/conception-v2.md). Les deux tests de mesure qui ont précédé l'appli sont décrits plus bas.
 
 ## L'appli
 
@@ -46,6 +46,9 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
       - MILLESIME_IMMICH_CLE=${MILLESIME_IMMICH_CLE}
       - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
       - MILLESIME_JETON_CARNET=${MILLESIME_JETON_CARNET}
+      - MILLESIME_TAG_PREFIXE=${MILLESIME_TAG_PREFIXE}
+      - MILLESIME_ALBUM_NON_DATEES=${MILLESIME_ALBUM_NON_DATEES}
+      - MILLESIME_MODELE_ALBUM=${MILLESIME_MODELE_ALBUM}
     ports:
       - "${PORT_MILLESIME:-8098}:8098"
     volumes:
@@ -66,9 +69,13 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 | `MILLESIME_SYNCHRO_MINUTES` | `60` | Fréquence de relecture d'Immich |
 | `MILLESIME_SEUIL_DOUTE` | `4` | Marge (en années) au-delà de laquelle la photo va dans « À trancher » |
 | `MILLESIME_SEUIL_SUSPECT` | `12` | Écart d'âge, en années, qui rend un visage suspect |
-| `MILLESIME_TAG_PREFIXE`, `MILLESIME_TAG_NON_DATEE` | `Numérisation`, `Non datée` | Tags des scans |
+| `MILLESIME_TAG_PREFIXE` | — (**obligatoire**) | Préfixe réel des tags de numérisation dans Immich, par ex. `Numérisation` : les scans datés portent `<préfixe>/AAAA-MM`, les autres `<préfixe>/Non datée` |
+| `MILLESIME_TAG_NON_DATEE` | `Non datée` | Sous-tag des scans sans date |
 | `MILLESIME_TAG_ESTIMEE` | `Date estimée` | Préfixe du tag écrit à la validation |
-| `MILLESIME_ALBUM_NON_DATEES`, `MILLESIME_MODELE_ALBUM` | `Non datées Numérisation`, `{annee} Numérisation` | Albums |
+| `MILLESIME_ALBUM_NON_DATEES` | — (**obligatoire**) | Nom réel de l'album des scans non datés, par ex. `Non datées Numérisation` |
+| `MILLESIME_MODELE_ALBUM` | — (**obligatoire**) | Nom des albums par année ; doit contenir `{annee}`, par ex. `{annee} Numérisation` |
+
+Depuis la 1.5.1, ces trois noms ne sont plus écrits dans le code : ils sont propres à chaque photothèque et se règlent dans les variables de la stack. Sans eux, Millésime refuse de démarrer ; si le tag des scans non datés est introuvable dans Immich, la synchronisation s'arrête sans rien modifier.
 
 La clé API Immich doit avoir ces permissions :
 
@@ -166,7 +173,7 @@ Le test ne se relance pas tout seul. Si `resultats/rapport.md` existe, le conten
       - TZ=${TZ}
       - IMMICH_URL=http://immich_server:2283
       - IMMICH_API_KEY=${MILLESIME_IMMICH_CLE}
-      - TAG_PREFIXE=Numérisation
+      - TAG_PREFIXE=${MILLESIME_TAG_PREFIXE}
       - TAG_NON_DATEE=Non datée
       - MAX_SCANS=300
       - REFS_PAR_PERSONNE=15
@@ -186,7 +193,7 @@ Le test ne se relance pas tout seul. Si `resultats/rapport.md` existe, le conten
 |---|---|---|
 | `IMMICH_URL` | `http://immich_server:2283` | Adresse d'Immich vue depuis le conteneur |
 | `IMMICH_API_KEY` | — | Clé API Immich, admin pour lire le modèle de stockage |
-| `TAG_PREFIXE` | `Numérisation` | Préfixe des tags de numérisation |
+| `TAG_PREFIXE` | — (obligatoire) | Préfixe réel des tags de numérisation |
 | `TAG_NON_DATEE` | `Non datée` | Sous-tag des scans sans date |
 | `MAX_SCANS` | `300` | Nombre maximal de scans datés analysés, répartis sur toutes les périodes |
 | `REFS_PAR_PERSONNE` | `15` | Nombre de photos numériques de référence par personne |

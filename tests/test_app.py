@@ -14,6 +14,13 @@ MDP = "secret-carnet"
 JC, JK = "jeton-calcul", "jeton-carnet"
 
 
+def noms_de_test(monkeypatch):
+    """Noms de tags et d'albums du faux Immich (1.5.1 : plus de valeur par défaut dans le code)."""
+    monkeypatch.setenv("MILLESIME_TAG_PREFIXE", "Numérisation")
+    monkeypatch.setenv("MILLESIME_ALBUM_NON_DATEES", "Non datées Numérisation")
+    monkeypatch.setenv("MILLESIME_MODELE_ALBUM", "{annee} Numérisation")
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     serveur, url, E = faux.demarrer()
@@ -23,6 +30,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("MILLESIME_JETON_CALCUL", JC)
     monkeypatch.setenv("MILLESIME_JETON_CARNET", JK)
     monkeypatch.setenv("MILLESIME_ETAT", str(tmp_path))
+    noms_de_test(monkeypatch)
     from app import main
     from app.config import Config
     from app.service import Millesime
@@ -340,6 +348,7 @@ def test_lien_immich_pour_le_navigateur(monkeypatch):
     monkeypatch.setenv("MILLESIME_PASSWORD", "x")
     monkeypatch.setenv("MILLESIME_IMMICH_CLE", "x")
     monkeypatch.setenv("MILLESIME_ETAT", "/tmp/millesime-test-lien")
+    noms_de_test(monkeypatch)
     monkeypatch.setenv("MILLESIME_IMMICH_URL", "http://immich_server:2283")
     monkeypatch.delenv("MILLESIME_IMMICH_LIEN", raising=False)
     cfg = Config.depuis_env()
@@ -440,3 +449,28 @@ def test_calculateur_en_veille(env, monkeypatch):
     assert FauxMiVolo.charges == 1
     assert client.get("/api/accueil").json()["taches"] == {"calibrage": 0, "a_dater": 0}
     assert client.get("/api/accueil").json()["pc"]["etat"] == "disponible"
+
+
+def test_151_noms_obligatoires_et_tag_introuvable(env, monkeypatch):
+    """Sans les noms de tags et d'albums, Millésime ne démarre pas ; un préfixe faux arrête la
+    synchronisation sans rien effacer."""
+    from app.config import Config
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    avant = client.get("/api/accueil").json()["compteurs"]
+    assert avant["total"] > 0
+    for v in ("MILLESIME_TAG_PREFIXE", "MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM"):
+        monkeypatch.delenv(v)
+        with pytest.raises(RuntimeError, match=v):
+            Config.depuis_env()
+        noms_de_test(monkeypatch)
+    monkeypatch.setenv("MILLESIME_MODELE_ALBUM", "Numérisation")
+    with pytest.raises(RuntimeError, match="annee"):
+        Config.depuis_env()
+    from app import main
+    main.m().cfg.tag_prefixe = "Autre nom"
+    r = client.post("/api/synchroniser")
+    assert r.status_code == 400 and "introuvable" in r.json()["detail"]
+    assert client.get("/api/accueil").json()["compteurs"] == avant
+    main.m().cfg.tag_prefixe = "Numérisation"

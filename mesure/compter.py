@@ -17,7 +17,9 @@ import requests
 URL = os.environ.get("IMMICH_URL", "http://immich_server:2283").rstrip("/")
 S = requests.Session()
 S.headers["x-api-key"] = os.environ["IMMICH_API_KEY"]
-PREFIXE = os.environ.get("TAG_PREFIXE", "Numérisation")
+PREFIXE = os.environ.get("TAG_PREFIXE", "").strip()
+if not PREFIXE:
+    raise SystemExit("Variable TAG_PREFIXE absente : le préfixe réel des tags de numérisation dans Immich.")
 NON_DATEE = os.environ.get("TAG_NON_DATEE", "Non datée")
 
 

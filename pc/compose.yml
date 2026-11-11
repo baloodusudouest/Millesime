@@ -18,7 +18,7 @@ services:
       - TZ=Europe/Paris
       - IMMICH_URL=${IMMICH_URL:-http://192.168.1.10:2283}
       - IMMICH_API_KEY=${IMMICH_API_KEY}
-      - TAG_PREFIXE=Numérisation
+      - TAG_PREFIXE=${TAG_PREFIXE:?préfixe réel des tags de numérisation dans Immich, à écrire dans .env}
       - TAG_NON_DATEE=Non datée
       - MAX_SCANS=${MAX_SCANS:-300}
       - REFS_PAR_PERSONNE=15

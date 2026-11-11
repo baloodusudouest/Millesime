@@ -66,6 +66,10 @@ class Millesime:
             pref = self.cfg.tag_prefixe + "/"
             tags = self.immich.tags()
             non_datee = next((t for t in tags if (t.get("value") or "") == pref + self.cfg.tag_non_datee), None)
+            if not non_datee:
+                # 1.5.1 : un nom mal saisi dans la stack ne doit pas vider la liste des scans en silence
+                raise ErreurMillesime(f"Le tag « {pref}{self.cfg.tag_non_datee} » est introuvable dans Immich : vérifie "
+                                      "MILLESIME_TAG_PREFIXE et MILLESIME_TAG_NON_DATEE dans la stack. Rien n'a été modifié.")
             dates = []
             for t in tags:
                 v = t.get("value") or ""
