@@ -1,0 +1,74 @@
+name: app
+
+# Appli du NAS : tests (faux Immich, faux calculateur), puis image
+# ghcr.io/baloodusudouest/millesime:latest (+ <version> et sha-<commit>).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "frontend/**"
+      - "tests/test_app.py"
+      - "tests/faux_immich_app.py"
+      - "mesure/calcul.py"
+      - "requirements.txt"
+      - "Dockerfile"
+      - ".github/workflows/app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt uvicorn==0.32.1
+      - run: python -m pytest -q tests/test_app.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Interface compilée
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund && npx vite build --outDir /tmp/static
+
+  image:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: echo "version=$(grep -oP '__version__ = \"\K[^\"]+' app/__init__.py)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          tags: |
+            ghcr.io/baloodusudouest/millesime:latest
+            ghcr.io/baloodusudouest/millesime:${{ steps.v.outputs.version }}
+            ghcr.io/baloodusudouest/millesime:sha-${{ github.sha }}
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
+      - name: Démarrage de l'image
+        run: |
+          docker run -d --name essai -e MILLESIME_PASSWORD=x -e MILLESIME_IMMICH_CLE=x \
+            -e MILLESIME_IMMICH_URL=http://127.0.0.1:9 -e MILLESIME_SYNCHRO_MINUTES=60 \
+            -p 8098:8098 ghcr.io/baloodusudouest/millesime:sha-${{ github.sha }}
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8098/health && break; sleep 1; done
+          curl -fs http://127.0.0.1:8098/ | grep -q "Millésime"
+          docker logs essai | tail -5

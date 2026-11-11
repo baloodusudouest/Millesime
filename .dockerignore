@@ -1,0 +1,10 @@
+.git
+.github
+**/node_modules
+app/static
+tests
+docs
+mesure
+pc
+**/__pycache__
+*.pyc

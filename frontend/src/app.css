@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/* Cave à vin : fond vert bouteille, texte ivoire d'étiquette, lie-de-vin pour agir, or pour les
+   années validées. L'élément marquant : l'année proposée, composée en Bodoni comme un millésime
+   sur une étiquette. Tout le reste reste sobre. */
+@theme {
+  --color-verre: #121c1a;       /* fond */
+  --color-verre-2: #1a2724;     /* surfaces */
+  --color-filet: #2c3b37;       /* filets */
+  --color-champ: #6f7f78;       /* bord des champs (≥ 3:1 sur le fond) */
+  --color-etiquette: #ebe3cf;   /* texte principal */
+  --color-craie: #a6aea2;       /* texte secondaire */
+  --color-lie: #c4577a;         /* actions */
+  --color-lie-fonce: #7a2e46;
+  --color-or: #d4b86a;          /* validé, millésime */
+  --color-alerte: #e0795f;
+
+  --font-sans: "Public Sans Variable", system-ui, sans-serif;
+  --font-millesime: "Bodoni Moda Variable", "Didot", Georgia, serif;
+}
+
+@layer base {
+  html { color-scheme: dark; -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--color-verre); color: var(--color-etiquette);
+    font-family: var(--font-sans); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  :focus-visible { outline: 2px solid var(--color-or); outline-offset: 2px; }
+  input {
+    background: var(--color-verre); border: 1px solid var(--color-champ); border-radius: 6px;
+    padding: 0.5rem 0.65rem; color: var(--color-etiquette); width: 100%; font-size: 16px;
+  }
+  input:focus { border-color: var(--color-or); outline: none; }
+  button { cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+}
+
+@layer components {
+  .bouton {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    min-height: 2.75rem; padding: 0.45rem 1rem; border-radius: 6px;
+    border: 1px solid var(--color-filet); color: var(--color-etiquette); font-weight: 500;
+  }
+  .bouton:hover { border-color: var(--color-champ); }
+  .bouton:disabled { opacity: 0.45; cursor: not-allowed; }
+  .bouton-principal { background: var(--color-lie); border-color: var(--color-lie); color: #1a0b10; font-weight: 650; }
+  .bouton-principal:hover { background: #d36a8b; border-color: #d36a8b; }
+  .bouton-confirmer { background: var(--color-or); border-color: var(--color-or); color: #221a05; font-weight: 650; }
+  .millesime { font-family: var(--font-millesime); font-variant-numeric: lining-nums; letter-spacing: -0.02em; }
+  .surface { background: var(--color-verre-2); border: 1px solid var(--color-filet); border-radius: 8px; }
+  .secondaire { color: var(--color-craie); }
+  .lien { color: var(--color-etiquette); text-decoration: underline; text-underline-offset: 3px;
+          text-decoration-color: var(--color-champ); }
+  .lien:hover { text-decoration-color: var(--color-or); }
+}
