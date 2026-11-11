@@ -31,7 +31,7 @@ from PIL import Image
 
 URL = os.environ.get("MILLESIME_URL", "http://192.168.1.10:8098").rstrip("/")
 JETON = os.environ.get("MILLESIME_JETON_CALCUL", "")
-LOT = int(os.environ.get("LOT", "20"))
+LOT = int(os.environ.get("LOT", "10"))   # petit lot : la barre d'avancement de Millésime bouge souvent
 VEILLE = os.environ.get("VEILLE", "0") == "1"
 VEILLE_MINUTES = float(os.environ.get("VEILLE_MINUTES", "5"))
 VEILLE_CYCLES = int(os.environ.get("VEILLE_CYCLES", "0"))      # 0 = sans fin (les tests en mettent quelques-uns)

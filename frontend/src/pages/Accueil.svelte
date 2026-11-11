@@ -1,5 +1,6 @@
 <script>
-  import { api, dateCourte, pluriel, session } from '../lib/api.svelte.js'
+  import { api, dateCourte, pluriel, session, pc } from '../lib/api.svelte.js'
+  import EtatPC from '../components/EtatPC.svelte'
   let { deconnecter } = $props()
   let a = $state(null)
   let erreur = $state('')
@@ -20,7 +21,7 @@
     { n: a.compteurs.a_dater, texte: 'photos à dater', lien: '#dater', action: 'Dater' },
     { n: a.compteurs.a_trancher, texte: 'photos à trancher', lien: '#trancher', action: 'Trancher' },
     { n: a.compteurs.a_nommer, texte: 'groupes de visages à nommer', lien: '#nommer', action: 'Nommer' },
-    { n: a.taches.calibrage + a.taches.a_dater, texte: a.pc?.actif ? 'visages en cours d’analyse sur le PC' : 'visages à analyser sur le PC', lien: '#calcul', action: a.pc?.actif ? 'Voir' : 'Mode d’emploi' },
+    { n: a.taches.calibrage + a.taches.a_dater, texte: pc.etat === 'en_cours' ? 'visages en cours d’analyse sur le PC' : 'visages à analyser sur le PC', lien: '#calcul', action: ['en_cours', 'en_attente', 'disponible'].includes(pc.etat) ? 'Voir' : 'Mode d’emploi' },
     { n: a.compteurs.suspects, texte: 'visages à vérifier dans Immich', lien: '#verifier', action: 'Voir' },
   ] : [])
 </script>
@@ -74,18 +75,13 @@
       <h2 class="font-semibold">Synchronisation avec Immich</h2>
       <p class="secondaire mt-1 text-sm">
         {#if a.derniere_synchro}Dernière : {dateCourte(a.derniere_synchro.le)}, {pluriel(a.derniere_synchro.scans, 'scan')} relus.{:else}Jamais faite.{/if}
-        Elle se refait toute seule chaque heure, et toutes les 15 min quand le PC est connecté.
+        Elle se refait toute seule chaque heure, et toutes les 15 min quand le PC est disponible.
       </p>
       <button class="bouton mt-2" onclick={synchroniser} disabled={synchro}>{synchro ? 'Synchronisation…' : 'Synchroniser maintenant'}</button>
     </div>
   </section>
 
-  <p class="mt-6 text-sm {a.pc?.actif ? 'text-or' : 'secondaire'}">
-    {#if a.pc?.actif && a.taches.calibrage + a.taches.a_dater}PC connecté : calcul en cours (dernier contact il y a {a.pc.il_y_a_min} min).
-    {:else if a.pc?.actif}PC connecté : rien à calculer, il revérifie toutes les 5 min (dernier contact il y a {a.pc.il_y_a_min} min).
-    {:else if a.pc}PC déconnecté depuis {dateCourte(a.pc.le)} : allume le PC et ouvre Docker Desktop.
-    {:else}Calculateur du PC jamais vu : voir <a class="lien" href="#calcul">Calcul sur le PC</a>.{/if}
-  </p>
+  <div class="mt-6"><EtatPC /></div>
 
   <section class="mt-8 rounded-lg border border-dashed border-filet p-4">
     <h2 class="font-semibold">Home Assistant</h2>

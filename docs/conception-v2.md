@@ -246,3 +246,18 @@ Julien a choisi la conception v2 complète, avec l'écran Nommer **sans fusion**
 - **Suivi** : Millésime note la dernière demande du PC (Accueil, Calcul, `/api/etat.pc_en_veille`). Le message pour carnet devient « en cours d'analyse sur le PC » quand le PC est en veille, et « allume le PC et ouvre Docker Desktop » sinon.
 
 **1.4.1** : « en veille » prêtait à confusion (on comprenait « le PC dort »). L'interface affiche maintenant « PC connecté : calcul en cours », « PC connecté : rien à calculer » ou « PC déconnecté ». Le nom Windows du PC (`COMPUTERNAME`) remplace l'identifiant du conteneur, et `/api/etat` renvoie aussi `pc_connecte`.
+
+## 17. Version 1.5 (11/11/2026) : suivi du calcul en direct
+
+Julien veut voir où en est le PC. Un bloc d'état, partagé par l'Accueil, l'écran Calcul et une pastille dans l'en-tête (« PC 42 % », « PC prêt », « PC éteint »), distingue quatre états :
+
+- **PC non disponible** : aucun contact depuis 12 minutes. Le bloc indique combien de visages attendent.
+- **PC disponible** : connecté, rien à calculer. Il revérifie toutes les 5 minutes.
+- **Calcul imminent** : des visages attendent et le PC les prendra à son prochain passage, dans moins de 5 minutes.
+- **Calcul en cours** : barre d'avancement, nombre de visages faits sur le total, pourcentage et temps restant estimé d'après la vitesse observée.
+
+Fonctionnement :
+
+- Le serveur garde la passe en cours (`pc_passe` : début, total, restants) et la met à jour à chaque demande de tâches et à chaque lot reçu. Une passe sans nouvelles depuis 15 minutes repart de zéro.
+- `/api/pc` est interrogé toutes les 10 s pendant un calcul et toutes les 30 s sinon, jamais quand l'onglet est caché.
+- Les lots du calculateur passent de 20 à 10 visages, pour que la barre avance environ toutes les 30 s.

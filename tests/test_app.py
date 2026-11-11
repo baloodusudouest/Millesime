@@ -358,10 +358,19 @@ def test_veille_du_pc(env):
     # file pleine : pas de synchro, le PC est noté actif en veille, carnet ne demande plus d'allumer le PC
     r = client.get("/api/calcul/taches?n=1&veille=true&machine=gaming", headers=h).json()
     assert r["synchro_lancee"] is False
-    assert client.get("/api/accueil").json()["pc"]["actif"] is True
+    pc = client.get("/api/pc").json()
+    assert pc["etat"] == "en_cours" and pc["machine"] == "gaming" and pc["fait"] == 0 and pc["pourcentage"] == 0
+    assert client.get("/api/accueil").json()["pc"]["etat"] == "en_cours"
+    # un résultat reçu : la barre avance
+    t1 = client.get("/api/calcul/taches?n=1&veille=true&machine=gaming", headers=h).json()["taches"][0]
+    client.post("/api/calcul/resultats", headers=h, json={"resultats": [{"face_id": t1["face_id"], "age_visage": 30.0}]})
+    pc = client.get("/api/pc").json()
+    assert pc["fait"] == 1 and pc["total"] == pc["fait"] + pc["restants"] and pc["reste_min"] is not None
     e = client.get("/api/etat", headers={"Authorization": f"Bearer {JK}"}).json()
     assert e["pc_en_veille"] and "en cours d'analyse" in e["message"]
     calculer(client, E)
+    client.post("/api/calcul/fin", headers=h, json={"machine": "gaming"})
+    assert client.get("/api/pc").json()["etat"] == "disponible"
     # file vide, dernière synchro récente : rien
     assert client.get("/api/calcul/taches?n=1&veille=true", headers=h).json()["synchro_lancee"] is False
     # file vide, synchro vieille de plus de 15 min : relecture d'Immich lancée en arrière-plan
@@ -382,6 +391,7 @@ def test_veille_du_pc(env):
     client.post("/api/synchroniser")
     e = client.get("/api/etat", headers={"Authorization": f"Bearer {JK}"}).json()
     assert not e["pc_en_veille"] and "allume le PC" in e["message"]
+    assert client.get("/api/pc").json()["etat"] == "indisponible"
 
 
 def test_calculateur_en_veille(env, monkeypatch):
@@ -429,4 +439,4 @@ def test_calculateur_en_veille(env, monkeypatch):
         srv.should_exit = True
     assert FauxMiVolo.charges == 1
     assert client.get("/api/accueil").json()["taches"] == {"calibrage": 0, "a_dater": 0}
-    assert client.get("/api/accueil").json()["pc"]["veille"] is True
+    assert client.get("/api/accueil").json()["pc"]["etat"] == "disponible"

@@ -1,5 +1,5 @@
 <script>
-  import { api, session } from '../lib/api.svelte.js'
+  import { api, session, suivrePc } from '../lib/api.svelte.js'
   let mdp = $state('')
   let erreur = $state('')
   let envoi = $state(false)
@@ -11,6 +11,7 @@
     try {
       await api.post('/api/connexion', { mot_de_passe: mdp })
       session.connecte = true
+      suivrePc()
     } catch (err) {
       erreur = err.message
     } finally {
