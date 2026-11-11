@@ -180,3 +180,33 @@ GitHub Actions : build `linux/amd64`, test de l'inférence dans un conteneur QEM
 - **Album après validation** : « AAAA Numérisation », en retirant la photo de « Non datées Numérisation », avec un tag qui signale une estimation calculée.
 - **Étape « Nommer » dans Millésime** : les groupes de visages des scans sont classés par fréquence, puis nommés ou fusionnés dans Immich depuis l'appli. Les dates de naissance restent gérées par carnet.
 - **Ordre** : test n°2, puis conception v2, puis conseil, puis code.
+
+## 15. Résultat du test de mesure n°2 (11/11/2026, PC de Julien)
+
+Le test a tourné sur 300 scans datés par leur tampon ; 137 d'entre eux ont au moins un visage exploitable. Matériel : i5-12600KF, AMD RX 6700. MiVOLO tourne sur le processeur (1,55 s par visage), Qwen3-VL 8B instruct tourne sur la carte graphique (17,7 s par photo).
+
+**Erreur sur l'âge d'un visage (scans)** :
+
+| Méthode | Erreur médiane | Enfants (0-12 ans) |
+|---|---|---|
+| InsightFace | 14,6 ans | 19,4 ans |
+| MiVOLO v2, visage seul | 3,7 ans | 2,2 ans |
+| MiVOLO v2, visage + buste | 3,6 ans | 2,2 ans |
+
+**Erreur sur l'année de la photo**, mesurée en validation croisée par lots, c'est-à-dire avec une correction toujours calculée sur d'autres mois de tampon :
+
+| Méthode | Erreur médiane | ≤ 3 ans |
+|---|---|---|
+| MiVOLO visage + buste, sans correction | 3,4 ans | 45 % |
+| MiVOLO calibré sur les scans datés (biais et poids par tranche d'âge) | 2,2 ans | 64 % |
+| … sur les photos avec un enfant | 2,1 ans | 90 % |
+| Qwen3-VL (photo entière), sans correction | 8,2 ans (biais −8) | 15 % |
+
+**Point de méthode** : 77 % des scans datés sont de 1995-2000. Sur l'ensemble des scans, répondre toujours « 1997 » donne une erreur médiane de 1,5 à 1,8 an, ce qui bat tous les modèles : sur cet échantillon, le chiffre global ne permet pas de les départager. **Hors 1995-2000** (27 photos), MiVOLO calibré se trompe de **2,2 ans** en médiane, contre **4,2 ans** pour « 1997 » : il distingue donc vraiment les époques. Qwen3-VL ne les distingue presque pas : corrélation 0,2 avec l'année vraie, et 7,1 ans d'erreur hors 1995-2000. Sa correction linéaire revient à répondre « 1997 ».
+
+**Anomalies repérées** : sur les photos numériques, les visages de Paul GARNIER sont estimés 23 ans trop jeunes, et ceux de Jeanne DUVAL 13,6 ans trop jeunes. Le groupe de visages Immich mélange sans doute plusieurs personnes, ou la date de naissance est fausse. Il faut le vérifier dans Immich ; c'est un argument de plus pour l'étape « Nommer ».
+
+**Conclusions** :
+- MiVOLO v2 (visage + buste), calibré sur les scans datés, est un **indice utile** d'environ ±2 ans, fiable en présence d'enfants.
+- La vision locale n'apporte rien pour dater et peut être abandonnée.
+- Le frein principal reste la couverture : moins d'un scan sur deux a un visage nommé avec une date de naissance.
