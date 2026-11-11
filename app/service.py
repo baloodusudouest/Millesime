@@ -622,6 +622,6 @@ class Millesime:
             message = f"Millésime : {n} visage(s) en cours d'analyse sur le PC"
         else:
             message = f"Millésime : {n} visage(s) à analyser — allume le PC et ouvre Docker Desktop"
-        return {"a_analyser": n, "scans_a_analyser": a["a_analyser"], "pc_en_veille": en_veille,
+        return {"a_analyser": n, "scans_a_analyser": a["a_analyser"], "pc_connecte": en_veille, "pc_en_veille": en_veille,
                 "a_dater": a["a_dater"], "a_trancher": a["a_trancher"], "a_nommer": a["a_nommer"],
                 "validees": a["validees"], "sans_naissance": self.sans_naissance(), "message": message}

@@ -244,3 +244,5 @@ Julien a choisi la conception v2 complète, avec l'écran Nommer **sans fusion**
 - **File vide** : Millésime relit Immich en arrière-plan, au plus toutes les 15 minutes. Un visage ajouté ou nommé dans Immich est donc analysé en moins de 20 minutes environ, sans rien faire.
 - **Millésime injoignable** : la veille réessaie au cycle suivant, sans s'arrêter.
 - **Suivi** : Millésime note la dernière demande du PC (Accueil, Calcul, `/api/etat.pc_en_veille`). Le message pour carnet devient « en cours d'analyse sur le PC » quand le PC est en veille, et « allume le PC et ouvre Docker Desktop » sinon.
+
+**1.4.1** : « en veille » prêtait à confusion (on comprenait « le PC dort »). L'interface affiche maintenant « PC connecté : calcul en cours », « PC connecté : rien à calculer » ou « PC déconnecté ». Le nom Windows du PC (`COMPUTERNAME`) remplace l'identifiant du conteneur, et `/api/etat` renvoie aussi `pc_connecte`.

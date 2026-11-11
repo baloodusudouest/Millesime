@@ -35,7 +35,7 @@ LOT = int(os.environ.get("LOT", "20"))
 VEILLE = os.environ.get("VEILLE", "0") == "1"
 VEILLE_MINUTES = float(os.environ.get("VEILLE_MINUTES", "5"))
 VEILLE_CYCLES = int(os.environ.get("VEILLE_CYCLES", "0"))      # 0 = sans fin (les tests en mettent quelques-uns)
-MACHINE = platform.node()
+MACHINE = os.environ.get("MACHINE") or platform.node()
 os.environ.setdefault("MIVOLO", "1")
 
 import mesure  # noqa: E402  (réutilise le chargement et la préparation MiVOLO du test de mesure)
