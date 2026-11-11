@@ -1,5 +1,6 @@
 <script>
-  import { api, session } from './lib/api.svelte.js'
+  import { api, session, suivrePc } from './lib/api.svelte.js'
+  import EtatPC from './components/EtatPC.svelte'
   import Connexion from './pages/Connexion.svelte'
   import Accueil from './pages/Accueil.svelte'
   import Dater from './pages/Dater.svelte'
@@ -29,7 +30,7 @@
   const page = $derived(route.page)
   window.addEventListener('hashchange', () => (route = lire()))
 
-  api.get('/api/session').then((s) => { session.connecte = s.connecte; session.version = s.version })
+  api.get('/api/session').then((s) => { session.connecte = s.connecte; session.version = s.version; suivrePc() })
     .catch(() => (session.connecte = false))
 
   async function deconnecter() {
@@ -46,6 +47,7 @@
   <header class="sticky top-0 z-20 border-b border-filet bg-verre/95 backdrop-blur" style="padding-top: env(safe-area-inset-top)">
     <div class="mx-auto flex max-w-5xl items-center gap-4 px-4 py-2">
       <a href="#accueil" class="millesime text-2xl font-semibold text-etiquette">Millésime</a>
+      <EtatPC compact />
       <nav class="ml-auto hidden gap-1 sm:flex" aria-label="Principale">
         {#each [...ONGLETS, ...AUTRES] as o}
           <a href="#{o.id}" class="rounded-md px-3 py-2 text-sm"

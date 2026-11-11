@@ -163,6 +163,7 @@ class Millesime:
         self.base.ecrire("pc_vu", {"le": maintenant(), "veille": bool(veille), "machine": machine[:80]})
         lancee = False
         t = self.compter_taches()
+        self._suivre_passe(t["calibrage"] + t["a_dater"])
         if veille and not (t["calibrage"] + t["a_dater"]):
             derniere = (self.base.lire("derniere_synchro") or {}).get("le")
             age = (datetime.now() - datetime.fromisoformat(derniere)).total_seconds() / 60 if derniere else 1e9
@@ -175,6 +176,48 @@ class Millesime:
                 threading.Thread(target=_synchro, daemon=True).start()
                 lancee = True
         return {"synchro_lancee": lancee}
+
+    def _suivre_passe(self, restants: int, fini: bool = False) -> None:
+        """Mémorise l'avancement du calcul en cours (pour la barre de progression)."""
+        passe = self.base.lire("pc_passe")
+        en_cours = passe and not passe.get("fini")
+        if fini or not restants:
+            if en_cours:
+                self.base.ecrire("pc_passe", {**passe, "restants": 0, "fini": maintenant()})
+            return
+        if en_cours and (datetime.now() - datetime.fromisoformat(passe.get("maj", passe["debut"]))).total_seconds() > 900:
+            en_cours = False   # passe interrompue (PC éteint en route) : on repart de zéro pour l'estimation
+        if not en_cours:
+            passe = {"debut": maintenant(), "total": restants}
+        passe["total"] = max(passe["total"], restants)   # de nouveaux visages peuvent arriver en route
+        passe.update(restants=restants, maj=maintenant())
+        self.base.ecrire("pc_passe", passe)
+
+    def etat_pc(self) -> dict:
+        """État du calculateur pour l'interface :
+        indisponible (pas de contact depuis 12 min), disponible (rien à calculer),
+        en_attente (des visages attendent, le PC les prendra à son prochain passage, ≤ 5 min),
+        en_cours (calcul en route, avec avancement et temps restant estimé)."""
+        pc = self.pc_actif()
+        t = self.compter_taches()
+        restants = t["calibrage"] + t["a_dater"]
+        if not pc:
+            return {"etat": "jamais_vu", "restants": restants}
+        base = {"machine": pc.get("machine") or "", "le": pc["le"], "il_y_a_min": pc["il_y_a_min"], "restants": restants}
+        if not pc["actif"]:
+            return {**base, "etat": "indisponible"}
+        if not restants:
+            return {**base, "etat": "disponible"}
+        passe = self.base.lire("pc_passe")
+        if not passe or passe.get("fini"):
+            return {**base, "etat": "en_attente"}
+        total = max(passe["total"], restants)
+        fait = total - restants
+        ecoule = (datetime.now() - datetime.fromisoformat(passe["debut"])).total_seconds()
+        reste_min = round(ecoule / fait * restants / 60) if fait else None
+        return {**base, "etat": "en_cours", "total": total, "fait": fait,
+                "pourcentage": round(100 * fait / total) if total else 0, "reste_min": reste_min,
+                "debut": passe["debut"]}
 
     def pc_actif(self) -> dict | None:
         vu = self.base.lire("pc_vu")
@@ -208,7 +251,12 @@ class Millesime:
         if n:
             est.calibrer(self.base)
             est.recalculer_propositions(self.base, self.cfg.seuil_doute)
-        return {"enregistres": n, "restants": self.compter_taches()}
+        t = self.compter_taches()
+        self._suivre_passe(t["calibrage"] + t["a_dater"])
+        vu = self.base.lire("pc_vu")
+        if vu:
+            self.base.ecrire("pc_vu", {**vu, "le": maintenant()})
+        return {"enregistres": n, "restants": t}
 
     # ------------------------------------------------------------------ images
     def apercu(self, asset_id: str) -> bytes:
@@ -264,7 +312,7 @@ class Millesime:
                               "suspects": len(est.suspects(self.base, self.cfg.seuil_suspect))},
                 "taches": self.compter_taches(), "calibrage": cal,
                 "derniere_synchro": self.base.lire("derniere_synchro"),
-                "pc": self.pc_actif(),
+                "pc": self.etat_pc(),
                 "dernier_calcul": self.base.lire("dernier_calcul")}
 
     def liste(self, statut: str) -> list[dict]:

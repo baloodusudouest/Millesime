@@ -1,5 +1,6 @@
 <script>
-  import { api, dateCourte } from '../lib/api.svelte.js'
+  import { api, dateCourte, pc } from '../lib/api.svelte.js'
+  import EtatPC from '../components/EtatPC.svelte'
   let a = $state(null)
   api.get('/api/accueil').then((r) => (a = r))
   const total = $derived(a ? a.taches.calibrage + a.taches.a_dater : 0)
@@ -7,7 +8,7 @@
 </script>
 
 <h1 class="millesime text-4xl font-semibold">Calcul sur le PC</h1>
-{#if a}
+{#if a && pc.etat !== 'en_cours'}
   <p class="mt-3 text-lg">
     {#if total}<strong>{total}</strong> visage{total > 1 ? 's' : ''} attendent l'analyse
       ({a.taches.calibrage} pour le calibrage, {a.taches.a_dater} pour dater). Compte environ {Math.max(1, Math.round((total * 3) / 60))} min.
@@ -16,13 +17,7 @@
   {#if a.dernier_calcul}<p class="secondaire text-sm">Dernier calcul : {dateCourte(a.dernier_calcul.fin || a.dernier_calcul.le)}.</p>{/if}
 {/if}
 
-{#if a?.pc}
-  <p class="mt-3 text-sm {a.pc.actif ? 'text-or' : 'secondaire'}">
-    {#if a.pc.actif && total}PC connecté{a.pc.machine ? ` (${a.pc.machine})` : ''} : calcul en cours, dernier contact il y a {a.pc.il_y_a_min} min.
-    {:else if a.pc.actif}PC connecté{a.pc.machine ? ` (${a.pc.machine})` : ''} : rien à calculer, il revérifie toutes les 5 min (dernier contact il y a {a.pc.il_y_a_min} min).
-    {:else}PC déconnecté depuis {dateCourte(a.pc.le)} : allume le PC et ouvre Docker Desktop.{/if}
-  </p>
-{/if}
+<div class="mt-4"><EtatPC /></div>
 
 <p class="secondaire mt-6 max-w-2xl">
   L'âge des visages est estimé par MiVOLO sur ton PC : le NAS est trop lent pour ce modèle. Tant que Docker Desktop est

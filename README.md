@@ -97,7 +97,7 @@ Le calculateur tourne ensuite en **veille** tant que Docker Desktop est ouvert, 
 - Arrêter la veille : `docker compose -f calcul.yml down`.
 - Faire une seule passe sans veille : `docker compose -f calcul.yml run --rm -e VEILLE=0 millesime-calcul`.
 
-L'Accueil et l'écran « Calcul sur le PC » indiquent si le PC est connecté (en calcul ou en attente) ou déconnecté. `/api/etat` renvoie `pc_connecte`, et carnet ne demande d'allumer le PC que s'il ne s'est pas manifesté depuis 12 minutes.
+L'Accueil et l'écran « Calcul sur le PC » montrent en direct l’état du PC (non disponible, disponible, calcul en cours avec barre d’avancement et temps restant). `/api/etat` renvoie `pc_connecte`, et carnet ne demande d'allumer le PC que s'il ne s'est pas manifesté depuis 12 minutes.
 
 ### API pour les autres applis
 

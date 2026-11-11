@@ -121,6 +121,12 @@ def accueil():
     return {**m().accueil(), "version": __version__}
 
 
+@app.get("/api/pc")
+def etat_pc():
+    """État du calculateur (interrogé toutes les 10 à 30 s par l'interface)."""
+    return m().etat_pc()
+
+
 @app.post("/api/synchroniser")
 def synchroniser():
     return m().synchroniser()
@@ -246,6 +252,8 @@ def apercu_calcul(asset_id: str):
 @app.post("/api/calcul/fin")
 def fin_calcul(corps: dict = Body(default={})):
     """Appelé par le calculateur quand la file est vide : relance une synchronisation complète."""
+    t = m().compter_taches()
+    m()._suivre_passe(t["calibrage"] + t["a_dater"], fini=not (t["calibrage"] + t["a_dater"]))
     m().base.ecrire("dernier_calcul", {**(m().base.lire("dernier_calcul") or {}), "fin": time.strftime("%Y-%m-%dT%H:%M:%S"),
                                        "machine": str(corps.get("machine", ""))[:80]})
     return {"ok": True}

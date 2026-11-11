@@ -41,3 +41,16 @@ export function dateCourte(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
+
+// État du calculateur du PC, partagé par l'en-tête, l'Accueil et l'écran Calcul.
+// Interrogé toutes les 10 s pendant un calcul, toutes les 30 s sinon (et pas quand l'onglet est caché).
+export const pc = $state({ etat: null })
+let minuteur = null
+export async function suivrePc() {
+  clearTimeout(minuteur)
+  if (session.connecte && !document.hidden) {
+    try { Object.assign(pc, { pourcentage: null, reste_min: null, total: null, fait: null }, await api.get('/api/pc')) } catch {}
+  }
+  minuteur = setTimeout(suivrePc, pc.etat === 'en_cours' || pc.etat === 'en_attente' ? 10000 : 30000)
+}
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => !document.hidden && suivrePc())
