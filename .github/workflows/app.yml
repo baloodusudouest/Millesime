@@ -68,6 +68,8 @@ jobs:
         run: |
           docker run -d --name essai -e MILLESIME_PASSWORD=x -e MILLESIME_IMMICH_CLE=x \
             -e MILLESIME_IMMICH_URL=http://127.0.0.1:9 -e MILLESIME_SYNCHRO_MINUTES=60 \
+            -e MILLESIME_TAG_PREFIXE=Essai -e "MILLESIME_ALBUM_NON_DATEES=Non datées essai" \
+            -e "MILLESIME_MODELE_ALBUM={annee} essai" \
             -p 8098:8098 ghcr.io/baloodusudouest/millesime:sha-${{ github.sha }}
           for i in $(seq 1 30); do curl -fs http://127.0.0.1:8098/health && break; sleep 1; done
           curl -fs http://127.0.0.1:8098/ | grep -q "Millésime"
