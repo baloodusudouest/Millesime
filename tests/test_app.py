@@ -237,3 +237,48 @@ def test_calculateur_pc(env, monkeypatch):
     acc = client.get("/api/accueil").json()
     assert acc["taches"] == {"calibrage": 0, "a_dater": 0}      # l'échec n'est pas redemandé en boucle
     assert acc["dernier_calcul"]["fin"]
+
+
+def test_suggestions_fusion_et_annulation(env):
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    sug = client.get("/api/nommer/suggestions").json()
+    noms = [s["nom"] for s in sug]
+    assert "Julien B" in noms and "" not in noms
+    assert sug[0]["sur_scans"] >= sug[-1]["sur_scans"]          # présents sur les scans d'abord
+    # un nom existant est refusé (accents et casse ignorés) : il faut fusionner
+    r = client.post("/api/nommer/inconnu1", json={"nom": "jeanne duval"})
+    assert r.status_code == 400 and "existe déjà" in r.json()["detail"]
+    ap = client.get("/api/nommer/inconnu1/apercu/mamie").json()
+    assert ap["source"] and ap["cible"]["nom"] == "Jeanne DUVAL" and ap["cible"]["exemples"]
+    faces_avant = sorted(f["id"] for x in E["assets"].values() for f in x["faces"]
+                         if (f["person"] or {}).get("id") == "inconnu1")
+    r = client.post("/api/nommer/inconnu1/fusionner", json={"cible": "mamie"}).json()
+    assert r["visages"] == len(faces_avant) and "inconnu1" not in E["personnes"]
+    assert all((f["person"] or {}).get("id") == "mamie" for x in E["assets"].values() for f in x["faces"]
+               if f["id"] in faces_avant)
+    assert "inconnu1" not in [g["person_id"] for g in client.get("/api/nommer").json()["groupes"]]
+    # les visages fusionnés ont maintenant une date de naissance : ils partent au calcul
+    t = client.get("/api/calcul/taches?n=100", headers={"Authorization": f"Bearer {JC}"}).json()["taches"]
+    assert set(faces_avant) & {x["face_id"] for x in t}
+    # annulation : une nouvelle personne récupère exactement ces visages
+    j = next(x for x in client.get("/api/journal").json() if x["action"] == "fusionner")
+    r = client.post(f"/api/journal/{j['id']}/annuler").json()
+    nouvelle = r["person_id"]
+    apres = sorted(f["id"] for x in E["assets"].values() for f in x["faces"]
+                   if (f["person"] or {}).get("id") == nouvelle)
+    assert apres == faces_avant
+    assert nouvelle in [g["person_id"] for g in client.get("/api/nommer").json()["groupes"]]
+
+
+def test_annuler_un_nommage_et_boite(env):
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    client.post("/api/nommer/inconnu2", json={"nom": "Lucie MARTIN"})
+    j = next(x for x in client.get("/api/journal").json() if x["action"] == "nommer")
+    client.post(f"/api/journal/{j['id']}/annuler")
+    assert E["personnes"]["inconnu2"]["name"] == ""
+    b = client.get("/api/boite/nd0/nd0-f0").json()
+    assert 0 < b["x"] < 1 and 0 < b["l"] < 1 and b["nom"] == "Julien B"

@@ -54,6 +54,7 @@ class Millesime:
         self.verrou_synchro = threading.Lock()
         self.apercus = Cache(24)
         self.visages_immich = Cache(256)
+        self.suggestions_cache = None
 
     # ------------------------------------------------------------------ synchro
     def synchroniser(self) -> dict:
@@ -205,6 +206,21 @@ class Millesime:
         crop.save(buf, "JPEG", quality=85)
         return buf.getvalue()
 
+    def boite_visage(self, asset_id: str, face_id: str) -> dict:
+        """Boîte d'un visage en fractions de l'image (0-1), pour l'encadrer sur la photo en grand."""
+        v = self.base.un("SELECT x1, y1, x2, y2, img_w, img_h, person_nom FROM visages WHERE face_id=?", face_id)
+        if not v:
+            faces = self.visages_immich.obtenir(asset_id, lambda: self.immich.visages(asset_id))
+            f = next((x for x in faces if x["id"] == face_id), None)
+            if not f:
+                raise ErreurMillesime("Visage introuvable.")
+            v = {"x1": f["boundingBoxX1"], "y1": f["boundingBoxY1"], "x2": f["boundingBoxX2"], "y2": f["boundingBoxY2"],
+                 "img_w": f.get("imageWidth"), "img_h": f.get("imageHeight"),
+                 "person_nom": (f.get("person") or {}).get("name")}
+        w, h = v["img_w"] or 1, v["img_h"] or 1
+        return {"x": v["x1"] / w, "y": v["y1"] / h, "l": (v["x2"] - v["x1"]) / w, "h": (v["y2"] - v["y1"]) / h,
+                "nom": v.get("person_nom") or ""}
+
     # ------------------------------------------------------------------ écrans
     def accueil(self) -> dict:
         c = {r["statut"]: r["n"] for r in self.base.tous(
@@ -308,6 +324,14 @@ class Millesime:
             raise ErreurMillesime("Annule d'abord la modification la plus récente de cette photo.")
         avant, apres = json.loads(j["avant"]), json.loads(j["apres"])
         aid = j["asset_id"]
+        if j["action"] == "nommer":
+            self.immich.nommer_personne(aid, avant.get("nom") or "")
+            self.base.executer("UPDATE visages SET person_nom=? WHERE person_id=?", avant.get("nom") or None, aid)
+            self.base.executer("UPDATE journal SET annule_le=? WHERE id=?", maintenant(), journal_id)
+            self.suggestions_cache = None
+            return {"ok": True}
+        if j["action"] == "fusionner":
+            return self._annuler_fusion(j, avant, apres)
         if j["action"] == "valider":
             if avant.get("date"):
                 self.immich.changer_date(aid, avant["date"])
@@ -341,15 +365,107 @@ class Millesime:
             g["lien_immich"] = f"{self.cfg.immich_url}/people/{g['person_id']}"
         return lignes
 
+    @staticmethod
+    def _cle_nom(nom: str) -> str:
+        import unicodedata
+        n = unicodedata.normalize("NFKD", " ".join((nom or "").split()).casefold())
+        return "".join(c for c in n if not unicodedata.combining(c))
+
+    def suggestions(self) -> list[dict]:
+        """Personnes nommées d'Immich : celles présentes sur des scans d'abord (par nombre de scans), puis les autres."""
+        import time as _t
+        if self.suggestions_cache and _t.monotonic() - self.suggestions_cache[0] < 300:
+            return self.suggestions_cache[1]
+        sur_scans = {r["person_id"]: r["n"] for r in self.base.tous(
+            "SELECT person_id, COUNT(DISTINCT asset_id) AS n FROM visages WHERE person_id IS NOT NULL GROUP BY person_id")}
+        res = [{"person_id": p["id"], "nom": p["name"], "naissance": p.get("birthDate"),
+                "sur_scans": sur_scans.get(p["id"], 0)}
+               for p in self.immich.personnes() if (p.get("name") or "").strip()]
+        res.sort(key=lambda p: (-p["sur_scans"], self._cle_nom(p["nom"])))
+        self.suggestions_cache = (_t.monotonic(), res)
+        return res
+
+    def personne_existante(self, nom: str, sauf: str | None = None) -> dict | None:
+        cle = self._cle_nom(nom)
+        return next((p for p in self.suggestions() if self._cle_nom(p["nom"]) == cle and p["person_id"] != sauf), None)
+
     def nommer(self, person_id: str, nom: str) -> dict:
         nom = " ".join((nom or "").split())
         if len(nom) < 2:
             raise ErreurMillesime("Nom trop court.")
+        existe = self.personne_existante(nom, sauf=person_id)
+        if existe:
+            raise ErreurMillesime(f"« {existe['nom']} » existe déjà dans Immich : choisis-le pour fusionner, "
+                                  "sinon Immich aurait deux personnes du même nom.")
+        self.suggestions_cache = None
         self.immich.nommer_personne(person_id, nom)
         self.base.executer("UPDATE visages SET person_nom=? WHERE person_id=?", nom, person_id)
         self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
                            person_id, "nommer", json.dumps({"nom": ""}), json.dumps({"nom": nom}), maintenant())
         return {"ok": True, "nom": nom}
+
+    def _visages_de_personne(self, person_id: str) -> list[str]:
+        """Tous les visages d'une personne dans Immich (pas seulement ceux des scans)."""
+        ids = []
+        for a in self.immich.rechercher({"personIds": [person_id]}, 5000):
+            ids += [f["id"] for f in self.immich.visages(a["id"]) if (f.get("person") or {}).get("id") == person_id]
+        return ids
+
+    def apercu_fusion(self, source_id: str, cible_id: str) -> dict:
+        cible = next((p for p in self.suggestions() if p["person_id"] == cible_id), None)
+        if not cible:
+            raise ErreurMillesime("Personne cible introuvable dans Immich.")
+        src = self.base.tous("SELECT face_id, asset_id FROM visages WHERE person_id=? LIMIT 6", source_id)
+        exemples = self.base.tous("SELECT face_id, asset_id FROM visages WHERE person_id=? LIMIT 6", cible_id)
+        if len(exemples) < 6:
+            vus = {e["asset_id"] for e in exemples}
+            for a in self.immich.rechercher({"personIds": [cible_id]}, 30):
+                if len(exemples) >= 6:
+                    break
+                if a["id"] in vus:
+                    continue
+                f = next((x for x in self.immich.visages(a["id"]) if (x.get("person") or {}).get("id") == cible_id), None)
+                if f:
+                    exemples.append({"face_id": f["id"], "asset_id": a["id"]})
+        return {"source": src, "cible": {**cible, "exemples": exemples}}
+
+    def fusionner(self, source_id: str, cible_id: str) -> dict:
+        """Fusionne le groupe sans nom dans une personne existante, en notant ses visages pour pouvoir annuler."""
+        if source_id == cible_id:
+            raise ErreurMillesime("Impossible de fusionner une personne avec elle-même.")
+        cible = next((p for p in self.suggestions() if p["person_id"] == cible_id), None)
+        if not cible:
+            raise ErreurMillesime("Personne cible introuvable dans Immich.")
+        source = self.immich.personne(source_id)
+        faces = self._visages_de_personne(source_id)
+        avant = {"source_id": source_id, "nom": source.get("name") or "", "naissance": source.get("birthDate"),
+                 "faces": faces}
+        apres = {"cible_id": cible_id, "cible_nom": cible["nom"]}
+        jid = self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
+                                 source_id, "fusionner", json.dumps(avant), json.dumps(apres), maintenant())
+        self.immich.fusionner_personnes(cible_id, [source_id])
+        self.base.executer("UPDATE visages SET person_id=?, person_nom=?, naissance=? WHERE person_id=?",
+                           cible_id, cible["nom"], cible.get("naissance"), source_id)
+        self.base.executer("DELETE FROM frises WHERE person_id IN (?, ?)", source_id, cible_id)
+        self.suggestions_cache = None
+        est.recalculer_propositions(self.base, self.cfg.seuil_doute)
+        return {"ok": True, "journal": jid, "visages": len(faces), "cible": cible["nom"]}
+
+    def _annuler_fusion(self, j: dict, avant: dict, apres: dict) -> dict:
+        """Recrée une personne et lui rend les visages notés avant la fusion."""
+        nouvelle = self.immich.creer_personne(avant.get("nom") or "")
+        for fid in avant.get("faces", []):
+            self.immich.reassigner_visage(fid, nouvelle["id"])
+        faces = avant.get("faces", [])
+        if faces:
+            marque = ",".join("?" * len(faces))
+            self.base.executer(f"UPDATE visages SET person_id=?, person_nom=?, naissance=NULL WHERE face_id IN ({marque})",
+                               nouvelle["id"], avant.get("nom") or None, *faces)
+        self.base.executer("DELETE FROM frises WHERE person_id=?", apres.get("cible_id"))
+        self.base.executer("UPDATE journal SET annule_le=? WHERE id=?", maintenant(), j["id"])
+        self.suggestions_cache = None
+        est.recalculer_propositions(self.base, self.cfg.seuil_doute)
+        return {"ok": True, "person_id": nouvelle["id"], "visages": len(faces)}
 
     def ignorer_groupe(self, person_id: str) -> dict:
         self.base.executer("INSERT OR IGNORE INTO groupes_ignores(person_id) VALUES(?)", person_id)

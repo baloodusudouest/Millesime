@@ -11,7 +11,7 @@ Dater les photos papier numérisées à partir de l'âge des visages qu'elles co
 | Accueil | Photos datées / total, choses à faire, précision du calibrage, synchronisation |
 | Dater | Photo et visages, année proposée ± marge, bornes, frise de chaque personne ; Valider, Passer, Plusieurs années |
 | À trancher | Cas douteux : marge trop large, visages en désaccord, aucun visage exploitable |
-| Nommer | Groupes de visages sans nom sur les scans, à nommer dans Immich (jamais de fusion) |
+| Nommer | Groupes de visages sans nom sur les scans : nouveau nom, ou rattachement à une personne d'Immich (suggestions, aperçu côte à côte, fusion annulable) ; un visage touché s'affiche en grand |
 | À vérifier | Visages dont l'âge estimé contredit l'âge connu, signe d'un groupe mélangé ou d'une naissance fausse |
 | Calcul sur le PC | Mode d'emploi du calculateur et nombre de visages en attente |
 | Journal | Chaque écriture dans Immich, avec Annuler |
@@ -74,7 +74,7 @@ La clé API Immich doit avoir ces permissions :
 - `asset.read`, `asset.view` et `asset.update` ;
 - `album.read`, `album.create`, `albumAsset.create` et `albumAsset.delete` ;
 - `tag.read`, `tag.create` et `tag.asset` ;
-- `face.read`, `person.read` et `person.update`.
+- `face.read`, `face.update`, `person.read`, `person.create`, `person.update` et `person.merge`.
 
 Le plus simple est de créer une clé dédiée avec toutes les permissions.
 

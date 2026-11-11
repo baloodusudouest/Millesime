@@ -14,6 +14,7 @@
     if (j.action === 'valider') return `Datée ${j.apres.tag?.split('/').pop() ?? ''}, album « ${j.apres.album} »`
     if (j.action === 'plusieurs') return 'Mise de côté : plusieurs années'
     if (j.action === 'nommer') return `Groupe de visages nommé « ${j.apres.nom} »`
+    if (j.action === 'fusionner') return `${j.avant.faces?.length ?? 0} visages rattachés à ${j.apres.cible_nom}`
     return j.action
   }
 </script>
@@ -28,14 +29,14 @@
   <ul class="mt-6 divide-y divide-filet border-y border-filet">
     {#each liste as j (j.id)}
       <li class="flex items-center gap-3 py-3" class:opacity-50={j.annule_le}>
-        {#if j.action !== 'nommer'}
+        {#if j.action === 'valider' || j.action === 'plusieurs'}
           <img src={apercu(j.asset_id)} alt="" width="56" height="56" loading="lazy" class="h-14 w-14 shrink-0 rounded object-cover" />
         {/if}
         <div class="min-w-0 flex-1">
           <p class="truncate">{libelle(j)}</p>
           <p class="secondaire text-sm">{dateCourte(j.le)}{j.annule_le ? ` · annulée le ${dateCourte(j.annule_le)}` : ''}{j.apres.erreur ? ' · écriture interrompue' : ''}</p>
         </div>
-        {#if !j.annule_le && j.action !== 'nommer'}
+        {#if !j.annule_le}
           <button class="bouton" onclick={() => annuler(j)}>Annuler</button>
         {/if}
       </li>

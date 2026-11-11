@@ -109,3 +109,23 @@ class Immich:
 
     def nommer_personne(self, person_id: str, nom: str) -> dict:
         return self._json("PUT", f"/people/{person_id}", json={"name": nom})
+
+    def personnes(self) -> list[dict]:
+        """Toutes les personnes (nommées ou non), page par page."""
+        res, page = [], 1
+        while True:
+            r = self._json("GET", "/people", params={"page": page, "size": 500, "withHidden": "false"}) or {}
+            res += r.get("people", [])
+            if not r.get("hasNextPage"):
+                return res
+            page += 1
+
+    def fusionner_personnes(self, cible_id: str, ids: list[str]) -> list:
+        """Fusionne les personnes `ids` DANS `cible_id` (leurs visages rejoignent la cible)."""
+        return self._json("POST", f"/people/{cible_id}/merge", json={"ids": ids})
+
+    def creer_personne(self, nom: str = "") -> dict:
+        return self._json("POST", "/people", json={"name": nom} if nom else {})
+
+    def reassigner_visage(self, face_id: str, person_id: str) -> None:
+        self._req("PUT", f"/faces/{face_id}", json={"id": person_id})
