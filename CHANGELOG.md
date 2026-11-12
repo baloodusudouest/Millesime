@@ -1,5 +1,8 @@
 # Journal des versions
 
+## 2.0.1 — 12 novembre 2026
+- **Correction** : annuler une fusion de personnes échouait sur le vrai Immich. Millésime inversait la personne et le visage dans la demande de rattachement (Immich répondait 400). Trouvé pendant la migration, vérifié dans le code d'Immich. Le faux Immich des tests se comporte maintenant comme le vrai sur ce point.
+
 ## 2.0.0 — 11 novembre 2026
 Millésime prend le format de carnet. Aucune adresse de l'API ne change, ni la base, ni ce qui est écrit dans Immich (le test des écritures de la 1.6.0 passe sans modification).
 - **Habillage commun** : fonds neutres chauds, Inter, sombre par défaut et clair quand l'appareil le demande. La couleur de Millésime est le **lie-de-vin** ; l'or reste ce qui est validé ; l'année proposée et les grands nombres restent en Bodoni.

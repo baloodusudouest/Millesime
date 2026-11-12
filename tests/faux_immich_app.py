@@ -219,11 +219,14 @@ def demarrer():
                 return self._json(self._asset_public(a))
             m = re.fullmatch(r"/api/faces/([^/]+)", self.path)
             if m:
+                # comme le vrai Immich : l'adresse porte la personne, le corps porte le visage
+                if m.group(1) not in E["personnes"]:
+                    return self._json({"message": "Bad Request"}, 400)
                 for x in E["assets"].values():
                     for f in x["faces"]:
-                        if f["id"] == m.group(1):
-                            f["person"] = E["personnes"][c["id"]]
-                return self._json({"id": c["id"]})
+                        if f["id"] == c["id"]:
+                            f["person"] = E["personnes"][m.group(1)]
+                return self._json(E["personnes"][m.group(1)])
             m = re.fullmatch(r"/api/people/([^/]+)", self.path)
             if m:
                 E["personnes"][m.group(1)]["name"] = c["name"]

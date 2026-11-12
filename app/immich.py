@@ -139,4 +139,6 @@ class Immich:
         return self._json("POST", "/people", json={"name": nom} if nom else {})
 
     def reassigner_visage(self, face_id: str, person_id: str) -> None:
-        self._req("PUT", f"/faces/{face_id}", json={"id": person_id})
+        # 2.0.1 : dans l'API d'Immich, l'adresse porte la PERSONNE et le corps porte le visage
+        # (lu dans face.controller.ts). L'inverse, écrit jusqu'à la 2.0.0, était refusé (400).
+        self._req("PUT", f"/faces/{person_id}", json={"id": face_id})
