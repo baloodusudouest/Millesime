@@ -1,6 +1,13 @@
 # Journal des versions
 
 
+
+## 2.4.0 — 13/11/2026
+
+- **La date du dossier.** Un chemin comme « …/Date/1983/01/… », « …/1983-07 Vacances/… » ou « …/1983/… » donne une date. Une photo sans visage utile dont le dossier porte une date passe de « à trancher » à « à dater », avec cette année proposée (marge 0) ; « Prendre celle du dossier » l'écrit dans Immich (le 15 du mois, ou le 1er juillet pour une année seule), annulable. Quand il y a des visages, la date du dossier est comparée à l'estimation comme celles d'Immich et du nom du fichier. Vu le 13/11 : 3 955 photos « à trancher » faute de visage, venues de dossiers datés.
+- **Synchronisation légère.** Celle de chaque heure ne relit plus les visages de toutes les photos (26 minutes le 13/11, 6 247 photos) : seulement les photos changées dans Immich, jamais lues, ou dont c'est le tour (chacune une fois par jour, réparties sur 24 heures). Les noms, dates de naissance et masquages viennent d'une seule lecture des personnes. Le bouton « Synchroniser » relit tout. La première synchro après la mise à jour relit encore tout, une fois.
+- Tests : 28 du serveur, 16 d'écran.
+
 ## 2.3.0 — 13/11/2026
 
 - **Filtrer « Dater »** par dossier — la liste montre l'arbre des dossiers, et un dossier parent garde tout ce qu'il contient, avec le nombre de photos — et/ou par nom : le fichier, le dossier ou une personne sur la photo. Le chemin de la photo s'affiche au-dessus. Les chemins arrivent à la synchronisation suivante (chaque heure, ou « Synchroniser »).

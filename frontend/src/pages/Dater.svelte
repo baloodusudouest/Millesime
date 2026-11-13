@@ -131,7 +131,7 @@
     erreur = ''
     try {
       const r = await api.post(`/api/scans/${s.asset_id}/garder`, { laquelle })
-      message = { texte: (laquelle === 'nom' ? `Datée du ${dateJour(r.date_gardee)}, d'après le nom du fichier.` : `Date d'Immich gardée (${dateJour(r.date_gardee)}) : rien n'a été écrit.`) + (r.demande ? ' ' + r.demande : ''), journal: r.journal }
+      message = { texte: (laquelle === 'dossier' ? `Datée du ${dateJour(r.date_gardee)}, d'après le dossier.` : laquelle === 'nom' ? `Datée du ${dateJour(r.date_gardee)}, d'après le nom du fichier.` : `Date d'Immich gardée (${dateJour(r.date_gardee)}) : rien n'a été écrit.`) + (r.demande ? ' ' + r.demande : ''), journal: r.journal }
       retirer()
       await chargerScan()
     } catch (e) { erreur = e.message }
@@ -223,6 +223,7 @@
           <dl class="grid gap-1">
             {#if c.date_connue}<div class="flex justify-between gap-3"><dt class="secondaire">Date dans Immich</dt><dd>{dateJour(c.date_connue)}</dd></div>{/if}
             {#if c.date_nom}<div class="flex justify-between gap-3"><dt class="secondaire">Dans le nom du fichier</dt><dd>{dateJour(c.date_nom)}</dd></div>{/if}
+            {#if c.date_dossier}<div class="flex justify-between gap-3"><dt class="secondaire">Dans le dossier</dt><dd>{c.date_dossier}</dd></div>{/if}
             {#if c.annee_estimee !== null}<div class="flex justify-between gap-3"><dt class="secondaire">Estimée par Millésime</dt><dd>{c.annee_estimee} ±{c.marge}</dd></div>{/if}
           </dl>
           <p class="mt-2 font-semibold {c.coherent === false ? 'text-alerte' : c.coherent ? 'text-or' : ''}">{c.phrase}</p>
@@ -230,6 +231,7 @@
           <div class="mt-2 grid gap-2">
             {#if c.date_connue}<button class="bouton" onclick={() => garder('actuelle')} disabled={occupe}>Garder la date d'Immich ({c.date_connue.slice(0, 4)})</button>{/if}
             {#if c.date_nom}<button class="bouton" onclick={() => garder('nom')} disabled={occupe || session.lecture_seule}>Prendre celle du nom du fichier ({c.date_nom.slice(0, 4)})</button>{/if}
+            {#if c.date_dossier}<button class="bouton" onclick={() => garder('dossier')} disabled={occupe || session.lecture_seule}>Prendre celle du dossier ({c.date_dossier})</button>{/if}
           </div>
           <p class="secondaire mt-2 text-xs">Ou règle l'année ci-dessous et valide : c'est l'estimation qui sera écrite.</p>
         </div>

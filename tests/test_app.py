@@ -710,3 +710,43 @@ def test_filtres_dater_et_visage_detache(env):
     face = next(f for f in E["assets"]["nd0"]["faces"] if f["id"] == "nd0-f0")
     assert face["person"]["id"] == "julien"
     assert next(v for v in client.get("/api/scans/nd0").json()["visages"] if v["face_id"] == "nd0-f0")["person_nom"] == "Julien B"
+
+
+def test_240_date_lue_dans_le_dossier():
+    from app.service import date_du_dossier, jour_du_dossier
+    for chemin, attendu in (("/synologyphotos/Photos numérisées/Date/1983/01/scan.jpg", "1983-01"),
+                            ("/photos/1983-07 Vacances/a.jpg", "1983-07"), ("/photos/Date/1983/a.jpg", "1983"),
+                            ("/photos/Scans/Lot A/1983.jpg", None), ("/photos/2099/a.jpg", None), ("/photos/50 ans/a.jpg", None)):
+        assert date_du_dossier(chemin) == attendu, chemin
+    assert jour_du_dossier("1983-01") == "1983-01-15" and jour_du_dossier("1983") == "1983-07-01"
+
+
+def test_240_sans_visage_le_dossier_propose_et_s_ecrit(env):
+    """2.4.0 : une photo sans visage utile dont le dossier porte une date passe dans « à dater », et « prendre celle
+    du dossier » l'écrit (annulable)."""
+    client, E = env
+    connecter(client)
+    E["assets"]["nd-sans"]["originalPath"] = "/photos/Photos numérisées/Date/1983/01/nd-sans.jpg"
+    client.post("/api/synchroniser")
+    s = client.get("/api/scans/nd-sans").json()
+    assert s["statut"] == "a_dater" and s["annee_proposee"] == 1983 and s["marge"] == 0
+    assert s["comparaison"]["date_dossier"] == "1983-01" and "Aucun visage" in s["comparaison"]["phrase"]
+    r = client.post("/api/scans/nd-sans/garder", json={"laquelle": "dossier"}).json()
+    assert E["assets"]["nd-sans"]["exifInfo"]["dateTimeOriginal"] == "1983-01-15T12:00:00.000Z"
+    assert client.get("/api/scans/nd-sans").json()["statut"] == "validee"
+    assert client.post(f"/api/journal/{r['journal']}/annuler").json()["ok"]
+
+
+def test_240_synchro_legere(env):
+    """2.4.0 : la synchro de chaque heure ne relit que les photos changées (ou dont c'est le tour) ; les noms et
+    dates de naissance viennent d'une seule lecture des personnes ; le bouton relit tout."""
+    client, E = env
+    connecter(client)
+    from app import main
+    b = client.post("/api/synchroniser").json()
+    assert b["complete"] and b["relues"] > 10
+    E["requetes"].clear()
+    E["personnes"]["julien"]["name"] = "Julien BERT"                                    # renommé dans Immich
+    b = main.ETAT["m"].synchroniser()                                                    # la synchro de chaque heure
+    assert not b["complete"] and b["relues"] < 10
+    assert client.get("/api/scans/nd0").json()["visages"][0]["person_nom"] == "Julien BERT"

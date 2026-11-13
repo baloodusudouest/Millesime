@@ -133,11 +133,11 @@ class Immich:
     def nommer_personne(self, person_id: str, nom: str) -> dict:
         return self._json("PUT", f"/people/{person_id}", json={"name": nom})
 
-    def personnes(self) -> list[dict]:
-        """Toutes les personnes (nommées ou non), page par page."""
+    def personnes(self, masquees: bool = False) -> list[dict]:
+        """Toutes les personnes (nommées ou non), page par page ; `masquees` : celles masquées aussi."""
         res, page = [], 1
         while True:
-            r = self._json("GET", "/people", params={"page": page, "size": 500, "withHidden": "false"}) or {}
+            r = self._json("GET", "/people", params={"page": page, "size": 500, "withHidden": "true" if masquees else "false"}) or {}
             res += r.get("people", [])
             if not r.get("hasNextPage"):
                 return res

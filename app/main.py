@@ -143,7 +143,8 @@ def etat_pc():
 
 @app.post("/api/synchroniser")
 def synchroniser():
-    return m().synchroniser()
+    """Le bouton « Synchroniser » relit tout (2.4.0) ; la synchro de chaque heure est légère."""
+    return m().synchroniser(complete=True)
 
 
 @app.get("/api/scans")
@@ -168,7 +169,7 @@ def valider(asset_id: str, corps: dict = Body(...)):
 def garder_date(asset_id: str, corps: dict = Body(...)):
     """2.2.0 : la photo a déjà une date. « actuelle » : on la garde, rien n'est écrit. « nom » : celle du nom du fichier."""
     laquelle = str(corps.get("laquelle", ""))
-    if laquelle == "nom":
+    if laquelle in ("nom", "dossier"):
         ecriture()
     return m().garder_date(asset_id, laquelle)
 
