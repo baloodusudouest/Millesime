@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from . import estimation as est
-from .auth import COOKIE, DUREE, Sessions, jeton_valide
+from .auth import COMMUN, COOKIE, DUREE, Sessions, jeton_valide
 from .config import Config
 from .immich import ErreurImmich, LectureSeule
 from .service import ErreurMillesime, Millesime
@@ -65,7 +65,7 @@ async def garde(request: Request, appel):
         if not jeton_valide(request.headers.get("authorization"), m().cfg.jeton_carnet):
             return JSONResponse({"detail": "Jeton carnet manquant ou invalide."}, status_code=401)
     elif chemin.startswith("/api/") and chemin not in ("/api/connexion", "/api/session", "/api/ha/etat"):
-        if not ETAT["sessions"].valide(request.cookies.get(COOKIE)):
+        if not ETAT["sessions"].connecte(request.cookies):
             return JSONResponse({"detail": "Connexion nécessaire."}, status_code=401)
     reponse = await appel(request)
     if chemin.startswith("/api/") and not chemin.startswith(("/api/apercu/", "/api/visage/", "/api/vignette/")):
@@ -103,7 +103,7 @@ def sante():
 # -- connexion -------------------------------------------------------------------
 @app.get("/api/session")
 def session(request: Request):
-    return {"connecte": ETAT["sessions"].valide(request.cookies.get(COOKIE)), "version": __version__,
+    return {"connecte": ETAT["sessions"].connecte(request.cookies), "version": __version__,
             "lecture_seule": m().cfg.lecture_seule}
 
 
@@ -125,6 +125,7 @@ def deconnexion():
     m().base.ecrire("session_generation", s.generation)
     r = JSONResponse({"ok": True})
     r.delete_cookie(COOKIE)
+    r.delete_cookie(COMMUN)      # « Se déconnecter » ferme aussi la connexion commune
     return r
 
 
