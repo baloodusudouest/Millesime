@@ -791,3 +791,24 @@ def test_250_titre_d_album(env):
     s = client.get("/api/scans/nd-sans").json()
     assert s["comparaison"]["date_dossier"] == "1987-07" and "Noël juillet 1987 au chalet" in s["comparaison"]["date_dossier_source"]
     assert s["annee_proposee"] == 1987 and "l'album" in s["raison"]
+
+
+def test_260_dossiers_et_albums_datables(env):
+    """2.6.0 : la colonne des dossiers/albums datables, leurs photos, et « dater toutes les photos du dossier »."""
+    client, E = env
+    connecter(client)
+    E["assets"]["nd-sans"]["originalPath"] = "/photos/Noël 1992 chez mamie/sous/nd-sans.jpg"
+    E["albums"]["al-noel"] = {"id": "al-noel", "albumName": "juillet 1987", "assets": {"nd2"}}
+    E["assets"]["nd2"]["faces"] = []
+    client.post("/api/synchroniser")
+    g = client.get("/api/datables/groupes").json()
+    noel = next(x for x in g if x["sorte"] == "dossier" and x["nom"].endswith("Noël 1992 chez mamie"))
+    assert noel["date"] == "1992" and noel["n"] == 1
+    assert any(x["sorte"] == "album" and x["nom"] == "juillet 1987" for x in g)
+    photos = client.get("/api/datables/photos", params={"cle": noel["cle"]}).json()
+    assert [p["asset_id"] for p in photos] == ["nd-sans"] and photos[0]["fichier"] == "nd-sans.jpg"
+    r = client.post("/api/datables/dater", json={"groupe": noel["cle"], "n": 200}).json()
+    assert r["faites"] == 1 and r["restant"] == 0
+    assert client.get("/api/scans/nd-sans").json()["statut"] == "validee"
+    assert client.get("/api/scans/nd2").json()["statut"] != "validee"                  # l'autre groupe n'a pas bougé
+    assert client.get("/api/vignette/nd2").status_code == 200

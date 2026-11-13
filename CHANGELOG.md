@@ -3,6 +3,13 @@
 
 
 
+
+## 2.6.0 — 13/11/2026
+
+- **« Datables par le nom » en deux colonnes.** À gauche, chaque dossier (celui qui porte la date, sous-dossiers compris) et chaque album dont le titre date des photos, avec sa date et son nombre de photos, et un champ pour chercher. Un clic montre à droite toutes ses photos en vignettes (un clic en grand) et le bouton « Dater toutes les photos à la date du dossier (…) » (ou de l'album), avec confirmation qui dit la date écrite. Annulable juste après, ou depuis le journal. Sur iPhone, la liste puis les photos, avec un retour.
+- Correction : dans Dater, une photo d'avant un changement de filtre pouvait rester affichée (« photo 1 sur 0 »).
+- Tests : 32 du serveur, 20 d'écran.
+
 ## 2.5.0 — 13/11/2026
 
 - **Tuile « Datables par le nom »** dans À traiter : les photos qu'un nom de dossier, de sous-dossier ou un titre d'album date, sans visage pour les dater ou avec des visages qui disent la même chose. Celles dont les visages contredisent le nom n'y sont pas.

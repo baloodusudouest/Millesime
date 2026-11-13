@@ -82,6 +82,10 @@ class Immich:
     def apercu(self, asset_id: str) -> bytes:
         return self._req("GET", f"/assets/{asset_id}/thumbnail", params={"size": "preview"}).content
 
+    def vignette(self, asset_id: str) -> bytes:
+        """2.6.0 : la petite vignette d'une photo (grilles)."""
+        return self._req("GET", f"/assets/{asset_id}/thumbnail", params={"size": "thumbnail"}).content
+
     def personne(self, person_id: str) -> dict:
         return self._json("GET", f"/people/{person_id}")
 

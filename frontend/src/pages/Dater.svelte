@@ -78,11 +78,15 @@
     position = 0
     await chargerScan()
   }
+  let demande = 0     // 2.6.0 : une réponse arrivée après un changement de filtre ne doit pas réafficher l'ancienne photo
   async function chargerScan() {
+    const ici = ++demande
     s = null
     confirmer = false
     if (!liste.length || position >= liste.length) return
-    s = await api.get(`/api/scans/${liste[position].asset_id}`)
+    const lu = await api.get(`/api/scans/${liste[position].asset_id}`)
+    if (ici !== demande) return
+    s = lu
     const anneesVisages = (s.details.visages || []).map((v) => v.annee)
     annee = s.annee_proposee ?? (anneesVisages.length ? Math.floor(anneesVisages[0]) : s.details?.voisins?.mediane ?? 1990)
     marge = s.marge ?? 3

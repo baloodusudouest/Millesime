@@ -7,6 +7,7 @@
   import Connexion from './pages/Connexion.svelte'
   import ATraiter from './pages/ATraiter.svelte'
   import Dater from './pages/Dater.svelte'
+  import Datables from './pages/Datables.svelte'
   import Nommer from './pages/Nommer.svelte'
   import Verifier from './pages/Verifier.svelte'
   import Services from './pages/Services.svelte'
@@ -34,7 +35,7 @@
   const page = $derived(route.page)
   const actif = $derived(FILES.includes(page) ? 'a-traiter' : page)
   // Dans une file où l'on valide photo après photo, la pilule s'efface sur iPhone : « Valider » reste sous le pouce
-  const enFile = $derived(page === 'dater' || page === 'trancher' || page === 'datables')
+  const enFile = $derived(page === 'dater' || page === 'trancher')
   let compteurs = $state(null)
   async function compter() {
     try { compteurs = (await api.get('/api/accueil')).compteurs } catch {}
@@ -86,7 +87,7 @@
     {/if}
     {#if page === 'dater'}<Dater statut="a_dater" />
     {:else if page === 'trancher'}<Dater statut="a_trancher" />
-    {:else if page === 'datables'}<Dater statut="datables" />
+    {:else if page === 'datables'}<Datables />
     {:else if page === 'nommer'}<Nommer cible={route.param} />
     {:else if page === 'verifier'}<Verifier />
     {:else if page === 'connexion'}<Services service={route.param} />
