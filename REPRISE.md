@@ -4,6 +4,7 @@ Fichier à lire en premier dans une nouvelle session, et à mettre à jour à ch
 
 ## État (11/11/2026)
 
+- **2.1.0** (13/11/2026) : connexion commune avec l'Anneau — cookie `maison_session` (accepté ; `Sessions.connecte`, `commun_valide` dans `app/auth.py`). Jamais essayée sur la vraie installation.
 - **2.0.0 sur `main`** : format de carnet (habillage lie-de-vin, rail et pilule, quatre entrées, tuiles, Connexion, Réglages). Aucun changement d'API ni d'écriture.
 - 1.6.0 : mode lecture seule, test qui fige les écritures dans Immich, premier test d'écran.
 - 1.5.1 : noms de tags et d'albums obligatoires dans la stack. Historique du dépôt réécrit le même jour (noms de personnes, adresse locale, chemin du NAS retirés).
