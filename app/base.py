@@ -56,6 +56,15 @@ CREATE TABLE IF NOT EXISTS journal (
 CREATE TABLE IF NOT EXISTS groupes_ignores (person_id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS frises (person_id TEXT PRIMARY KEY, contenu TEXT, maj TEXT);
 CREATE TABLE IF NOT EXISTS reglages (cle TEXT PRIMARY KEY, valeur TEXT);
+-- 2.2.0 : albums et dossiers d'Immich choisis dans l'appli pour être datés, en plus des scans tagués
+CREATE TABLE IF NOT EXISTS sources (
+    cle         TEXT PRIMARY KEY,          -- 'album:<id>' | 'dossier:<chemin>'
+    sorte       TEXT NOT NULL,             -- 'album' | 'dossier'
+    ref         TEXT NOT NULL,             -- identifiant de l'album, ou chemin du dossier tel qu'Immich le voit
+    nom         TEXT NOT NULL,
+    ajoutee_le  TEXT NOT NULL,
+    demandee_le TEXT                       -- dossier : demande de passage envoyée à Transhumance
+);
 """
 
 
@@ -71,6 +80,12 @@ class Base:
             cols = {r[1] for r in self.cx.execute("PRAGMA table_info(visages)")}
             if "person_masque" not in cols:
                 self.cx.execute("ALTER TABLE visages ADD COLUMN person_masque INTEGER DEFAULT 0")
+            if "source" not in {r[1] for r in self.cx.execute("PRAGMA table_info(scans)")}:
+                self.cx.execute("ALTER TABLE scans ADD COLUMN source TEXT")      # 2.2.0 : NULL = scan tagué
+            cols = {r[1] for r in self.cx.execute("PRAGMA table_info(scans)")}
+            for col in ("date_connue", "date_nom"):                             # 2.2.0 : date déjà portée par la photo
+                if col not in cols:
+                    self.cx.execute(f"ALTER TABLE scans ADD COLUMN {col} TEXT")
 
     @contextmanager
     def transaction(self):

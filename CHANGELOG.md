@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 2.2.0 — 13 novembre 2026
+- **Choisir dans l'appli ce que Millésime date.** Réglages › « Ce que Millésime date » : en plus des scans tagués, on ajoute des albums et des dossiers d'Immich, plusieurs à la fois, avec un filtre. Toutes les photos d'une source choisie sont à dater. Un code couleur dit d'où vient chaque chose, dans les réglages et sur l'écran « Dater » : or pour un scan tagué, bleu pour un album, orange pour un dossier (le mot est toujours écrit à côté). Un dossier ne prend que les photos rangées directement dedans.
+- **Valider une photo d'album ou de dossier n'écrit que la date et le tag « Date estimée ».** Elle reste où elle est : aucun mouvement d'album. Les scans tagués gardent leur rangement par année.
+- **Une date déjà là est comparée à l'estimation.** Quand la photo porte une date dans Immich (autre que le 1900 des non datés) ou dans son nom de fichier, « Dater » montre les dates côte à côte, dit s'il y a une incohérence, et demande laquelle choisir : garder celle d'Immich (rien n'est écrit), prendre celle du nom du fichier, ou valider l'estimation. Chaque choix s'annule.
+- **Demande de passage à Transhumance.** Quand toutes les photos d'un dossier choisi sont datées, Millésime le signale à Transhumance (0.3.0), qui l'affiche ; rien n'est lancé. Réglage : le même jeton dans `MILLESIME_JETON_TRANSHUMANCE` et `TRANSHUMANCE_JETON_MILLESIME`. Sans jeton, un bouton le rappelle.
+- **Les deux noms d'albums des scans se règlent dans l'appli** (Réglages › « Albums des scans tagués »). `MILLESIME_ALBUM_NON_DATEES` et `MILLESIME_MODELE_ALBUM` ne sont plus obligatoires dans la stack : présentes, elles donnent la valeur de départ ; un réglage enregistré passe devant. `MILLESIME_TAG_PREFIXE` reste obligatoire.
+- Droit de plus pour la clé d'API : la lecture des dossiers d'Immich (vue par dossiers).
+- Tests : 23 de l'appli, 12 d'écran.
+
 ## 2.1.0 — 13 novembre 2026
 - **Connexion commune.** Connecté à l'Anneau, on n'a plus à se connecter ici : l'appli accepte le cookie « maison_session » que l'Anneau pose, quand elle est servie par la même adresse que lui. Le cookie est signé avec le mot de passe commun : une appli qui a un autre mot de passe continue de demander le sien. Il vaut trente jours, ou jusqu'au changement du mot de passe ; « Se déconnecter » le retire du navigateur.
 

@@ -73,6 +73,15 @@
   .titre-page { font-size: 1.9rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1.15; }
   .surface { background: var(--color-verre-2); border: 1px solid var(--color-filet); border-radius: 12px; }
   .secondaire { color: var(--color-craie); }
+  /* 2.2.0 : d'où vient une photo à dater. Trois origines, trois couleurs, et toujours le mot à côté. */
+  .origine { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+             border: 1px solid var(--teinte); color: var(--teinte); white-space: nowrap; }
+  .origine::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--teinte); }
+  .origine-tag { --teinte: var(--color-or); }
+  .origine-album { --teinte: #6fb3e8; }
+  .origine-dossier { --teinte: #e59a4a; }
+  @media (prefers-color-scheme: light) { .origine-album { --teinte: #1f6fb0; } .origine-dossier { --teinte: #a85a0c; } }
+  .champ { min-height: 2.75rem; width: 100%; padding: 0 0.75rem; font-size: 1rem; border: 1px solid var(--color-champ); border-radius: 8px; background: transparent; color: inherit; }
   .lien { color: var(--color-etiquette); text-decoration: underline; text-underline-offset: 3px;
           text-decoration-color: var(--color-champ); }
   .lien:hover { text-decoration-color: var(--color-lie); }

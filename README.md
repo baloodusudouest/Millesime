@@ -47,8 +47,9 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
       - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
       - MILLESIME_JETON_CARNET=${MILLESIME_JETON_CARNET}
       - MILLESIME_TAG_PREFIXE=${MILLESIME_TAG_PREFIXE}
-      - MILLESIME_ALBUM_NON_DATEES=${MILLESIME_ALBUM_NON_DATEES}
-      - MILLESIME_MODELE_ALBUM=${MILLESIME_MODELE_ALBUM}
+      - MILLESIME_ALBUM_NON_DATEES=${MILLESIME_ALBUM_NON_DATEES:-}   # facultatif depuis la 2.2 : se règle dans l'appli
+      - MILLESIME_MODELE_ALBUM=${MILLESIME_MODELE_ALBUM:-}           # facultatif depuis la 2.2 : se règle dans l'appli
+      - MILLESIME_JETON_TRANSHUMANCE=${MILLESIME_TRANSHUMANCE_JETON:-}   # 2.2 : le même que TRANSHUMANCE_JETON_MILLESIME ; vide : pas de demande
     ports:
       - "${PORT_MILLESIME:-8098}:8098"
     volumes:
@@ -73,8 +74,8 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 | `MILLESIME_TAG_PREFIXE` | — (**obligatoire**) | Préfixe réel des tags de numérisation dans Immich, par ex. `Numérisation` : les scans datés portent `<préfixe>/AAAA-MM`, les autres `<préfixe>/Non datée` |
 | `MILLESIME_TAG_NON_DATEE` | `Non datée` | Sous-tag des scans sans date |
 | `MILLESIME_TAG_ESTIMEE` | `Date estimée` | Préfixe du tag écrit à la validation |
-| `MILLESIME_ALBUM_NON_DATEES` | — (**obligatoire**) | Nom réel de l'album des scans non datés, par ex. `Non datées Numérisation` |
-| `MILLESIME_MODELE_ALBUM` | — (**obligatoire**) | Nom des albums par année ; doit contenir `{annee}`, par ex. `{annee} Numérisation` |
+| `MILLESIME_ALBUM_NON_DATEES` | — (facultatif depuis la 2.2 : se règle dans Réglages) | Nom réel de l'album des scans non datés, par ex. `Non datées Numérisation` |
+| `MILLESIME_MODELE_ALBUM` | — (facultatif depuis la 2.2 : se règle dans Réglages) | Nom des albums par année ; doit contenir `{annee}`, par ex. `{annee} Numérisation` |
 
 Depuis la 1.5.1, ces trois noms ne sont plus écrits dans le code : ils sont propres à chaque photothèque et se règlent dans les variables de la stack. Sans eux, Millésime refuse de démarrer ; si le tag des scans non datés est introuvable dans Immich, la synchronisation s'arrête sans rien modifier.
 

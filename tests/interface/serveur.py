@@ -54,6 +54,8 @@ def main() -> None:
                 break
         except httpx.HTTPError:
             time.sleep(0.1)
+    # 2.2.0 : un dossier déjà choisi, pour que l'écran « Dater » ait des photos qui portent une date
+    appli.m().ajouter_sources("dossier", ["/bibliotheque/Avant/Numérisations 2010"])
     appli.m().synchroniser()
     calculer(base, E)
     Path(dossier, "pret").write_text("ok")

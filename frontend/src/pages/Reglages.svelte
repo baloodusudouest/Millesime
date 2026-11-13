@@ -2,6 +2,7 @@
   // 2.0 : « Réglages », ce qui n'est pas un service : précision de l'indice, journal, déconnexion.
   import { api, pluriel, session } from '../lib/api.svelte.js'
   import Journal from './Journal.svelte'
+  import Sources from './Sources.svelte'
   let { deconnecter } = $props()
   let a = $state(null)
   api.get('/api/accueil').then((r) => (a = r)).catch(() => {})
@@ -27,6 +28,8 @@
     <p class="secondaire mt-1 text-sm">Chargement…</p>
   {/if}
 </section>
+
+<Sources />
 
 <section class="surface mt-4 p-4"><Journal integre /></section>
 

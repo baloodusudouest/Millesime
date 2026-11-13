@@ -164,6 +164,15 @@ def valider(asset_id: str, corps: dict = Body(...)):
     return m().valider(asset_id, corps.get("annee"), corps.get("marge", 1))
 
 
+@app.post("/api/scans/{asset_id}/garder")
+def garder_date(asset_id: str, corps: dict = Body(...)):
+    """2.2.0 : la photo a déjà une date. « actuelle » : on la garde, rien n'est écrit. « nom » : celle du nom du fichier."""
+    laquelle = str(corps.get("laquelle", ""))
+    if laquelle == "nom":
+        ecriture()
+    return m().garder_date(asset_id, laquelle)
+
+
 @app.post("/api/scans/{asset_id}/actualiser")
 def actualiser(asset_id: str):
     return m().actualiser_scan(asset_id)
@@ -172,6 +181,34 @@ def actualiser(asset_id: str):
 @app.post("/api/scans/{asset_id}/plusieurs")
 def plusieurs(asset_id: str):
     return m().plusieurs_annees(asset_id)
+
+
+# ---- 2.2.0 : ce que Millésime date (albums et dossiers choisis), et les noms d'albums des scans
+
+@app.get("/api/sources")
+def sources(choix: bool = False):
+    return m().sources(avec_choix=choix)
+
+
+@app.post("/api/sources")
+def ajouter_sources(corps: dict = Body(...)):
+    refs = corps.get("refs")
+    return m().ajouter_sources(str(corps.get("sorte", "")), [str(r) for r in refs] if isinstance(refs, list) else [])
+
+
+@app.post("/api/sources/retirer")
+def retirer_source(corps: dict = Body(...)):
+    return m().retirer_source(str(corps.get("cle", "")))
+
+
+@app.post("/api/sources/demander")
+def demander_passage(corps: dict = Body(...)):
+    return {"message": m().demander_passage(str(corps.get("cle", ""))), **m().sources()}
+
+
+@app.post("/api/reglages/albums")
+def regler_albums(corps: dict = Body(...)):
+    return m().regler_albums(str(corps.get("non_datees", "")), str(corps.get("modele", "")))
 
 
 @app.get("/api/journal")
