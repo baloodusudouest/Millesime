@@ -233,7 +233,7 @@
     .cadre.selection:not(.ouvert) .droite { order: -1; }   /* sur iPhone : les dossiers cochés au-dessus de la liste */
   }
   .tableau { overflow-x: auto; }
-  .gauche input { width: 100%; min-height: 2.75rem; padding: 0 0.75rem; border-radius: 0.6rem; border: 1px solid var(--color-filet); background: transparent; color: inherit; font: inherit; }
+  .gauche input[type="search"] { width: 100%; min-height: 2.75rem; padding: 0 0.75rem; border-radius: 0.6rem; border: 1px solid var(--color-filet); background: transparent; color: inherit; font: inherit; }
   .gauche ul { display: grid; gap: 0.35rem; max-height: 70dvh; overflow-y: auto; padding: 0; margin: 0.5rem 0 0; list-style: none; }
   .ligne-groupe { display: flex; align-items: center; gap: 0.5rem; }
   .coche { width: 1.25rem; height: 1.25rem; flex: none; accent-color: var(--color-or); }

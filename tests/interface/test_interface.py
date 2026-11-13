@@ -230,6 +230,10 @@ def test_270_plusieurs_dossiers_coches(page):
     page.goto(page.url.split("#")[0] + "#datables")
     lignes = page.locator(".ligne-groupe")
     lignes.first.wait_for()
+    # 2.7.1 : la case reste une case ; le nom du dossier garde la largeur de la ligne
+    ligne, case, nom = (lignes.first.bounding_box(), lignes.first.locator("input.coche").bounding_box(),
+                        lignes.first.locator("button.groupe").bounding_box())
+    assert case["width"] < 40 and nom["width"] > ligne["width"] * 0.7
     for l in lignes.all():
         l.locator("input.coche").check()
     sel = page.get_by_role("region", name="Dossiers cochés")
