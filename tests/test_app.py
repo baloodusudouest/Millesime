@@ -812,3 +812,21 @@ def test_260_dossiers_et_albums_datables(env):
     assert client.get("/api/scans/nd-sans").json()["statut"] == "validee"
     assert client.get("/api/scans/nd2").json()["statut"] != "validee"                  # l'autre groupe n'a pas bougé
     assert client.get("/api/vignette/nd2").status_code == 200
+
+
+def test_270_plusieurs_dossiers_dates_choisies(env):
+    """2.7.0 : plusieurs dossiers/albums d'un coup, chacun à sa date (celle du nom, ou une date tapée)."""
+    client, E = env
+    connecter(client)
+    E["assets"]["nd-sans"]["originalPath"] = "/photos/Noël 1992 chez mamie/nd-sans.jpg"
+    E["albums"]["al-ete"] = {"id": "al-ete", "albumName": "Vacances juillet 1987", "assets": {"nd2"}}
+    E["assets"]["nd2"]["faces"] = []
+    client.post("/api/synchroniser")
+    g = {x["nom"].rsplit("/", 1)[-1]: x["cle"] for x in client.get("/api/datables/groupes").json()}
+    assert client.post("/api/datables/dater", json={"groupes": {g["Noël 1992 chez mamie"]: "31/02/1992"}}).status_code == 400
+    r = client.post("/api/datables/dater", json={"groupes": {g["Noël 1992 chez mamie"]: "24/12/1992",
+                                                           g["Vacances juillet 1987"]: None}, "n": 200}).json()
+    assert r["faites"] == 2 and r["restant"] == 0
+    assert E["assets"]["nd-sans"]["exifInfo"]["dateTimeOriginal"] == "1992-12-24T12:00:00.000Z"      # date tapée
+    assert E["assets"]["nd2"]["exifInfo"]["dateTimeOriginal"] == "1987-07-15T12:00:00.000Z"          # date du nom
+    assert client.post(f"/api/lots/{r['lot']}/annuler").json()["annulees"] == 2

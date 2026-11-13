@@ -224,3 +224,23 @@ def test_260_datables_dossiers_a_gauche_photos_a_droite(page):
     bouton.click()
     page.get_by_role("button", name=re.compile("Confirmer : dater les 1 photos au 15 juillet 1987")).wait_for()
     assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
+
+
+def test_270_plusieurs_dossiers_coches(page):
+    page.goto(page.url.split("#")[0] + "#datables")
+    lignes = page.locator(".ligne-groupe")
+    lignes.first.wait_for()
+    for l in lignes.all():
+        l.locator("input.coche").check()
+    sel = page.get_by_role("region", name="Dossiers cochés")
+    sel.wait_for()
+    assert sel.locator("tbody tr").count() == 2
+    champ = sel.locator("input.date").first
+    champ.fill("31/02/1992")
+    assert sel.get_by_role("button", name=re.compile("Dater les")).is_disabled()                 # date illisible
+    champ.fill("24/12/1992")
+    assert "24 décembre 1992" in sel.inner_text()
+    sel.get_by_role("button", name=re.compile("Dater les 2 photos des 2 dossiers")).click()
+    sel.get_by_role("button", name=re.compile("Confirmer : dater les 2 photos")).wait_for()
+    sel.get_by_role("button", name="Tout décocher").click()
+    assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
