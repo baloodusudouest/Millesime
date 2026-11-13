@@ -1,5 +1,8 @@
 # Journal des versions
 
+## 2.2.1 — 13 novembre 2026
+- **Toujours sombre.** Le thème clair est retiré : l'appli est sombre partout, ouverte seule comme dans l'Anneau, quel que soit le réglage du téléphone.
+
 ## 2.2.0 — 13 novembre 2026
 - **Choisir dans l'appli ce que Millésime date.** Réglages › « Ce que Millésime date » : en plus des scans tagués, on ajoute des albums et des dossiers d'Immich, plusieurs à la fois, avec un filtre. Toutes les photos d'une source choisie sont à dater. Un code couleur dit d'où vient chaque chose, dans les réglages et sur l'écran « Dater » : or pour un scan tagué, bleu pour un album, orange pour un dossier (le mot est toujours écrit à côté). Un dossier ne prend que les photos rangées directement dedans.
 - **Valider une photo d'album ou de dossier n'écrit que la date et le tag « Date estimée ».** Elle reste où elle est : aucun mouvement d'album. Les scans tagués gardent leur rangement par année.
