@@ -167,7 +167,8 @@ def test_220_une_date_deja_la_est_comparee(page):
     page.goto(page.url.split("#")[0] + "#dater")
     page.locator("section[aria-label='Année']").wait_for()
     for _ in range(14):                                                                  # jusqu'à une photo du dossier choisi
-        if page.get_by_role("group", name="Date déjà connue").count():
+        if page.get_by_role("group", name="Date déjà connue").count() and \
+                "Date dans Immich" in page.get_by_role("group", name="Date déjà connue").inner_text():
             break
         page.get_by_role("button", name="Passer").click()
         page.wait_for_timeout(250)
@@ -208,11 +209,18 @@ def test_230_filtres_et_ce_n_est_pas_cette_personne(page):
     assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
 
 
-def test_250_tuile_datables_par_le_nom(page):
+def test_260_datables_dossiers_a_gauche_photos_a_droite(page):
+    """2.6.0 : la tuile ouvre la liste des dossiers et albums datables ; un clic montre leurs photos et le bouton."""
     page.goto(page.url.split("#")[0] + "#a-traiter")
-    tuile = page.locator("a.tuile[href='#datables']")
-    tuile.wait_for()
-    assert "Datables par le nom" in tuile.inner_text()
-    tuile.click()
-    page.get_by_text(re.compile("Plus rien à dater par le nom|Datables par le nom")).first.wait_for()
+    page.locator("a.tuile[href='#datables']").click()
+    groupes = page.locator("aside[aria-label='Dossiers et albums'] .groupe")
+    groupes.first.wait_for()
+    textes = groupes.all_inner_texts()
+    assert any("Noël 1992 chez mamie" in t for t in textes) and any("Vacances juillet 1987" in t for t in textes)
+    groupes.filter(has_text="Vacances juillet 1987").click()
+    page.locator("ul[aria-label='Photos'] img").first.wait_for()
+    bouton = page.get_by_role("button", name=re.compile("Dater toutes les photos à la date de l'album"))
+    assert "juillet 1987" in bouton.inner_text()
+    bouton.click()
+    page.get_by_role("button", name=re.compile("Confirmer : dater les 1 photos au 15 juillet 1987")).wait_for()
     assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0

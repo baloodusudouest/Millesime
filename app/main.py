@@ -153,7 +153,24 @@ def dater_datables(corps: dict = Body(default={})):
     """2.5.0 : un lot de « Tout dater d'un coup » (l'écran rappelle jusqu'à ce qu'il n'en reste plus)."""
     ecriture()
     lot = str(corps.get("lot") or "")[:40] or datetime.now().strftime("nom-%Y%m%d-%H%M%S")
-    return m().dater_par_nom(lot, min(max(int(corps.get("n") or 100), 1), 200))
+    groupe = str(corps["groupe"]) if corps.get("groupe") else None
+    return m().dater_par_nom(lot, min(max(int(corps.get("n") or 100), 1), 200), groupe)
+
+
+@app.get("/api/datables/groupes")
+def groupes_datables():
+    """2.6.0 : les dossiers et albums qui datent des photos (colonne de gauche de « Datables par le nom »)."""
+    return m().groupes_datables()
+
+
+@app.get("/api/datables/photos")
+def photos_datables(cle: str):
+    return m().photos_groupe(cle)
+
+
+@app.get("/api/vignette/{asset_id}")
+def vignette(asset_id: str):
+    return Response(m().vignette(asset_id), media_type="image/jpeg", headers=IMG)
 
 
 @app.post("/api/lots/{lot}/annuler")

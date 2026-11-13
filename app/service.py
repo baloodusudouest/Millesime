@@ -79,6 +79,21 @@ def date_du_dossier(chemin: str | None) -> str | None:
     return trouvee
 
 
+def dossier_date(chemin: str | None) -> tuple[str, str] | None:
+    """2.6.0 : (le dossier qui porte la date, la date) : « …/Noël 1992 » → (« …/Noël 1992 », « 1992 ») ; pour
+    « …/1983/01/… », le dossier est « …/1983/01 ». None si aucun dossier du chemin ne porte de date."""
+    morceaux = (chemin or "").replace("\\", "/").split("/")[:-1]
+    trouve = None
+    for i, m in enumerate(morceaux):
+        suivant = morceaux[i + 1] if i + 1 < len(morceaux) else ""
+        d = date_d_un_nom(m, suivant)
+        if d:
+            seul = date_d_un_nom(m) or ""
+            fin = i + 2 if len(d) == 7 and len(seul) != 7 else i + 1     # le mois vient du sous-dossier « 01 »
+            trouve = ("/".join(morceaux[:fin]), d)
+    return trouve
+
+
 def bornes(d: str) -> tuple[int, int]:
     """Les années couvertes par une date de nom : (1985, 1985) ou (1989, 1992)."""
     if "/" in d:
@@ -136,6 +151,7 @@ class Millesime:
         self.immich = immich or Immich(cfg.immich_url, cfg.immich_cle, cfg.lecture_seule)
         self.verrou_synchro = threading.Lock()
         self.apercus = Cache(24)
+        self.vignettes = Cache(600)                  # 2.6.0 : grilles de « Datables par le nom »
         self.visages_immich = Cache(256)
         self.suggestions_cache = None
 
@@ -437,6 +453,9 @@ class Millesime:
         return {"enregistres": n, "restants": t}
 
     # ------------------------------------------------------------------ images
+    def vignette(self, asset_id: str) -> bytes:
+        return self.vignettes.obtenir(asset_id, lambda: self.immich.vignette(asset_id))
+
     def apercu(self, asset_id: str) -> bytes:
         return self.apercus.obtenir(asset_id, lambda: self.immich.apercu(asset_id))
 
@@ -506,11 +525,35 @@ class Millesime:
                 res.append(r)
         return res
 
-    def dater_par_nom(self, lot: str, n: int = 100) -> dict:
+    def _groupe_de(self, r: dict) -> tuple[str, str, str, str]:
+        """(clé, sorte, nom, date) du dossier ou de l'album qui date la photo."""
+        src = r.get("date_nom_source") or "dossier"
+        if src.startswith("album:"):
+            return src, "album", src[6:], r["date_dossier"]
+        dd = dossier_date(r.get("chemin")) or ((r.get("chemin") or "").rsplit("/", 1)[0], r["date_dossier"])
+        return f"dossier:{dd[0]}", "dossier", dd[0], r["date_dossier"]
+
+    def groupes_datables(self) -> list[dict]:
+        """2.6.0 : les dossiers et les albums qui datent des photos, avec leur date et le nombre de photos."""
+        g: dict[str, dict] = {}
+        for r in self.datables():
+            cle, sorte, nom, d = self._groupe_de(r)
+            x = g.setdefault(cle, {"cle": cle, "sorte": sorte, "nom": nom, "date": d, "n": 0, "sans_visage": 0})
+            x["n"] += 1
+            x["sans_visage"] += 1 if (r.get("raison") or "").startswith("date lue dans") else 0
+        return sorted(g.values(), key=lambda x: (x["date"], x["nom"].lower()))
+
+    def photos_groupe(self, cle: str) -> list[dict]:
+        return [{"asset_id": r["asset_id"], "fichier": (r.get("chemin") or "").rsplit("/", 1)[-1],
+                 "annee_proposee": r["annee_proposee"], "marge": r["marge"], "raison": r["raison"]}
+                for r in self.datables() if self._groupe_de(r)[0] == cle]
+
+    def dater_par_nom(self, lot: str, n: int = 100, groupe: str | None = None) -> dict:
         """2.5.0 : « Tout dater d'un coup » par lots de `n` : chaque photo prend la date de son nom (écrite dans Immich,
         notée au journal avec le numéro du lot, pour tout annuler d'un geste)."""
         faites, erreurs = 0, []
-        for r in self.datables()[:n]:
+        choix = [r for r in self.datables() if not groupe or self._groupe_de(r)[0] == groupe]
+        for r in choix[:n]:
             try:
                 self.garder_date(r["asset_id"], "dossier", lot=lot)
                 faites += 1
@@ -518,7 +561,8 @@ class Millesime:
                 erreurs.append(str(e))
                 if len(erreurs) >= 3:
                     break
-        return {"lot": lot, "faites": faites, "restant": len(self.datables()), "erreurs": erreurs[:3]}
+        reste = [r for r in self.datables() if not groupe or self._groupe_de(r)[0] == groupe]
+        return {"lot": lot, "faites": faites, "restant": len(reste), "erreurs": erreurs[:3]}
 
     def annuler_lot(self, lot: str) -> dict:
         """Annule toutes les écritures d'un lot, de la plus récente à la plus ancienne."""

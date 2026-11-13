@@ -56,6 +56,10 @@ def main() -> None:
             time.sleep(0.1)
     # 2.2.0 : un dossier déjà choisi, pour que l'écran « Dater » ait des photos qui portent une date
     appli.m().ajouter_sources("dossier", ["/bibliotheque/Avant/Numérisations 2010"])
+    # 2.6.0 : un dossier et un album dont le nom date des photos sans visage (« Datables par le nom »)
+    E["assets"]["nd-sans"]["originalPath"] = "/photos/Noël 1992 chez mamie/nd-sans.jpg"
+    E["albums"]["al-ete"] = {"id": "al-ete", "albumName": "Vacances juillet 1987", "assets": {"nd2"}}
+    E["assets"]["nd2"]["faces"] = []
     appli.m().synchroniser()
     calculer(base, E)
     Path(dossier, "pret").write_text("ok")
