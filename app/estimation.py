@@ -196,6 +196,12 @@ def proposer(base: Base, scan: dict, version: int | None, p: dict, seuil_doute: 
     if en_attente and not annees:
         return {"statut": "a_analyser", "annee_proposee": None, "marge": None,
                 "raison": f"{len(en_attente)} visage(s) en attente du calcul sur le PC", "details": details}
+    if not annees and scan.get("date_dossier"):
+        # 2.4.0 : pas de visage pour dater, mais le dossier porte une date (…/1983/01) : elle est proposée
+        d = scan["date_dossier"]
+        details["dossier"] = d
+        return {"statut": "a_dater", "annee_proposee": int(d[:4]), "marge": 0,
+                "raison": f"date lue dans le dossier ({d}), aucun visage pour la vérifier", "details": details}
     if not annees:
         return {"statut": "a_trancher", "annee_proposee": None, "marge": None,
                 "raison": "aucun visage nommé avec une date de naissance", "details": details}

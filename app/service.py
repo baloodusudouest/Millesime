@@ -1,6 +1,7 @@
 """Cœur de Millésime : synchronisation avec Immich, file de calcul, écriture, Nommer, frise, état."""
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import logging
@@ -24,6 +25,31 @@ def maintenant() -> str:
 
 
 _DATE_DANS_NOM = re.compile(r"(?<!\d)((?:19|20)\d{2})[-_. ]?(0[1-9]|1[0-2])[-_. ]?(0[1-9]|[12]\d|3[01])(?!\d)")
+
+
+# 2.4.0 : une date écrite dans le chemin des dossiers : …/1983/01/…, …/1983-01/…, …/1983/… (pas le nom du fichier)
+_ANNEE = re.compile(r"^(19\d{2}|20\d{2})(?:[-_. ](0[1-9]|1[0-2]))?(?:\b|$)")
+_MOIS = re.compile(r"^(0[1-9]|1[0-2])(?:\b|$)")
+
+
+def date_du_dossier(chemin: str | None) -> str | None:
+    """« AAAA-MM » ou « AAAA » lue dans les dossiers du chemin (le plus profond qui en porte une) ; sinon None."""
+    morceaux = (chemin or "").replace("\\", "/").split("/")[:-1]
+    trouvee = None
+    for i, m in enumerate(morceaux):
+        a = _ANNEE.match(m.strip())
+        if not a or int(a.group(1)) > datetime.now().year:
+            continue
+        mois = a.group(2)
+        if not mois and i + 1 < len(morceaux) and _MOIS.match(morceaux[i + 1].strip()):
+            mois = _MOIS.match(morceaux[i + 1].strip()).group(1)
+        trouvee = f"{a.group(1)}-{mois}" if mois else a.group(1)
+    return trouvee
+
+
+def jour_du_dossier(d: str) -> str:
+    """La date écrite pour une date de dossier : le 15 du mois, ou le 1er juillet pour une année seule."""
+    return f"{d}-15" if len(d) == 7 else f"{d}-07-01"
 
 
 def dates_connues(a: dict, deja_estime: bool = False) -> tuple[str | None, str | None]:
@@ -70,7 +96,7 @@ class Millesime:
         self.suggestions_cache = None
 
     # ------------------------------------------------------------------ synchro
-    def synchroniser(self) -> dict:
+    def synchroniser(self, complete: bool = False) -> dict:
         """Relit les scans « Non datée » et datés, leurs visages et les personnes, puis recalcule."""
         if not self.verrou_synchro.acquire(blocking=False):
             raise ErreurMillesime("Synchronisation déjà en cours.")
@@ -95,9 +121,11 @@ class Millesime:
                     estimees.update(a["id"] for a in self.immich.rechercher({"tagIds": [t["id"]]}))
 
             vus = set()
+            maj: dict[str, str] = {}                     # 2.4.0 : dernière modification de chaque photo dans Immich
             if non_datee:
                 for a in self.immich.rechercher({"tagIds": [non_datee["id"]]}):
                     vus.add(a["id"])
+                    maj[a["id"]] = a.get("updatedAt") or ""
                     envoi = est.parse_date(a.get("createdAt") or a.get("fileCreatedAt"))
                     self._enregistrer_scan(a["id"], "non_datee", None, envoi.isoformat() if envoi else None,
                                            envoi.year if envoi else None, a["id"] in estimees, chemin=a.get("originalPath"))
@@ -105,6 +133,7 @@ class Millesime:
                 for a in self.immich.rechercher({"tagIds": [t["id"]]}):
                     if a["id"] not in vus:
                         vus.add(a["id"])
+                        maj[a["id"]] = a.get("updatedAt") or ""
                         self._enregistrer_scan(a["id"], "datee", d, None, None, False, chemin=a.get("originalPath"))
             # 2.2.0 : les albums et les dossiers choisis dans l'appli. Toutes leurs images sont à dater,
             # sauf celles déjà vues par un tag (le tag passe devant) ; une image déjà estimée est comptée faite.
@@ -120,6 +149,7 @@ class Millesime:
                     if a["id"] in vus:
                         continue
                     vus.add(a["id"])
+                    maj[a["id"]] = a.get("updatedAt") or ""
                     envoi = est.parse_date(a.get("createdAt") or a.get("fileCreatedAt"))
                     self._enregistrer_scan(a["id"], "non_datee", None, envoi.isoformat() if envoi else None,
                                            envoi.year if envoi else None, a["id"] in estimees, source=src["cle"],
@@ -131,13 +161,28 @@ class Millesime:
                 if r["asset_id"] not in vus:
                     self.base.executer("DELETE FROM visages WHERE asset_id=?", r["asset_id"])
                     self.base.executer("DELETE FROM scans WHERE asset_id=?", r["asset_id"])
-            n_visages = 0
-            for r in self.base.tous("SELECT asset_id FROM scans WHERE statut <> 'validee' OR type='datee'"):
-                n_visages += self._synchro_visages(r["asset_id"])
+            # 2.4.0 : la date écrite dans le chemin des dossiers
+            for r in self.base.tous("SELECT asset_id, chemin, date_dossier FROM scans WHERE chemin IS NOT NULL"):
+                d = date_du_dossier(r["chemin"])
+                if d != r["date_dossier"]:
+                    self.base.executer("UPDATE scans SET date_dossier=? WHERE asset_id=?", d, r["asset_id"])
+            # 2.4.0 : synchro légère. Les visages ne sont relus que pour une photo changée dans Immich, jamais lue,
+            # ou dont c'est le tour (chaque photo une fois par jour, réparties sur les 24 heures) ; `complete` : toutes.
+            # Les noms, dates de naissance et masquages viennent d'une seule lecture des personnes.
+            n_visages, relues, heure, lu_le = 0, 0, datetime.now().hour, maintenant()
+            for r in self.base.tous("SELECT asset_id, maj_immich, visages_lus_le FROM scans WHERE statut <> 'validee' OR type='datee'"):
+                m_ = maj.get(r["asset_id"], "")
+                tour = int(hashlib.md5(r["asset_id"].encode()).hexdigest(), 16) % 24 == heure
+                if complete or not r["visages_lus_le"] or m_ != (r["maj_immich"] or "") or tour:
+                    n_visages += self._synchro_visages(r["asset_id"])
+                    relues += 1
+                    self.base.executer("UPDATE scans SET maj_immich=?, visages_lus_le=? WHERE asset_id=?", m_, lu_le, r["asset_id"])
+            self._rafraichir_personnes()
             cal = est.calibrer(self.base)
             est.recalculer_propositions(self.base, self.cfg.seuil_doute)
             bilan = {"le": maintenant(), "duree_s": round((datetime.now() - debut).total_seconds(), 1),
-                     "scans": len(vus), "visages": n_visages, "calibrage": cal["version"] if cal else None}
+                     "scans": len(vus), "visages": n_visages, "relues": relues, "complete": complete,
+                     "calibrage": cal["version"] if cal else None}
             self.base.ecrire("derniere_synchro", bilan)
             log.info("Synchronisation : %s", bilan)
             return bilan
@@ -159,6 +204,27 @@ class Millesime:
                                "VALUES(?,?,?,?,?,?,?,?)", asset_id, type_, date_tampon, lot, annee_envoi,
                                "validee" if deja_estime else ("a_analyser" if type_ == "non_datee" else "datee"), source,
                                chemin)
+
+    def _rafraichir_personnes(self) -> int:
+        """2.4.0 : noms, dates de naissance et masquage des personnes des visages connus, en une lecture."""
+        try:
+            gens = {p["id"]: p for p in self.immich.personnes(masquees=True)}
+        except ErreurImmich as e:
+            log.warning("Personnes illisibles : %s", e)
+            return 0
+        changes = 0
+        for v in self.base.tous("SELECT DISTINCT person_id, person_nom, naissance, person_masque FROM visages WHERE person_id IS NOT NULL"):
+            p = gens.get(v["person_id"])
+            if not p:
+                continue                              # fusionnée ou supprimée : la relecture de ses photos le dira
+            nom, naissance, masque = p.get("name") or None, p.get("birthDate") or None, 1 if p.get("isHidden") else 0
+            if (nom, naissance, masque) != (v["person_nom"], v["naissance"], v["person_masque"]):
+                self.base.executer("UPDATE visages SET person_nom=?, naissance=?, person_masque=? WHERE person_id=?",
+                                   nom, naissance, masque, v["person_id"])
+                changes += 1
+        if changes:
+            self.suggestions_cache = None
+        return changes
 
     def _synchro_visages(self, asset_id: str) -> int:
         faces = self.immich.visages(asset_id)
@@ -419,24 +485,28 @@ class Millesime:
     def _comparer(s: dict) -> dict | None:
         """2.2.0 : la photo porte déjà une date (Immich, nom du fichier). On la met en regard de l'estimation,
         on dit s'il y a une incohérence, et c'est l'utilisateur qui choisit."""
-        connue, du_nom = s.get("date_connue"), s.get("date_nom")
-        if not connue and not du_nom:
+        connue, du_nom, dossier = s.get("date_connue"), s.get("date_nom"), s.get("date_dossier")
+        if not connue and not du_nom and not dossier:
             return None
         estimee, marge = s.get("annee_proposee"), s.get("marge") or 0
-        annees = {int(d[:4]) for d in (connue, du_nom) if d}
+        if (s.get("raison") or "").startswith("date lue dans le dossier"):
+            estimee = None                           # la proposition vient du dossier lui-même : rien à comparer
+        annees = {int(d[:4]) for d in (connue, du_nom, dossier) if d}
         ecart = max(abs(a - estimee) for a in annees) if estimee is not None else None
-        entre_elles = bool(connue and du_nom and connue[:4] != du_nom[:4])
+        entre_elles = len(annees) > 1
         if estimee is None:
             coherent, phrase = (None if not entre_elles else False,
-                                "La date d'Immich et celle du nom du fichier ne disent pas la même année." if entre_elles
+                                "Les dates connues ne disent pas la même année." if entre_elles
+                                else "Aucun visage pour vérifier cette date." if dossier and not connue and not du_nom
                                 else "Pas encore d'estimation à comparer.")
         elif ecart > marge + 1 or entre_elles:
             coherent = False
             phrase = (f"Incohérence : {ecart} an{'s' if ecart > 1 else ''} d'écart avec l'estimation ({estimee} ±{marge})."
-                      if ecart > marge + 1 else "La date d'Immich et celle du nom du fichier ne disent pas la même année.")
+                      if ecart > marge + 1 else "Les dates connues ne disent pas la même année.")
         else:
             coherent, phrase = True, f"Cohérent avec l'estimation ({estimee} ±{marge})."
-        return {"date_connue": connue, "date_nom": du_nom if du_nom != connue else None, "annee_estimee": estimee,
+        return {"date_connue": connue, "date_nom": du_nom if du_nom != connue else None, "date_dossier": dossier,
+                "annee_estimee": estimee,
                 "marge": marge if estimee is not None else None, "coherent": coherent, "phrase": phrase}
 
     def garder_date(self, asset_id: str, laquelle: str) -> dict:
@@ -445,18 +515,20 @@ class Millesime:
         s = self.base.un("SELECT * FROM scans WHERE asset_id=? AND type='non_datee'", asset_id)
         if not s:
             raise ErreurMillesime("Scan inconnu.")
-        choisie = {"actuelle": s.get("date_connue"), "nom": s.get("date_nom")}.get(laquelle)
+        choisie = {"actuelle": s.get("date_connue"), "nom": s.get("date_nom"),
+                   "dossier": jour_du_dossier(s["date_dossier"]) if s.get("date_dossier") else None}.get(laquelle)
         if not choisie:
             raise ErreurMillesime("Cette photo n'a pas cette date.")
         avant = {"statut": s["statut"]}
         apres = {"origine": laquelle, "date_gardee": choisie}
-        if laquelle == "nom":
+        ecrit = laquelle in ("nom", "dossier")
+        if ecrit:
             a = self.immich.asset(asset_id)
             avant["date"] = (a.get("exifInfo") or {}).get("dateTimeOriginal") or a.get("localDateTime")
             apres["date"] = f"{choisie}T12:00:00.000Z"
         jid = self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
-                                 asset_id, "valider" if laquelle == "nom" else "garder", json.dumps(avant), json.dumps(apres), maintenant())
-        if laquelle == "nom":
+                                 asset_id, "valider" if ecrit else "garder", json.dumps(avant), json.dumps(apres), maintenant())
+        if ecrit:
             try:
                 self.immich.changer_date(asset_id, apres["date"])
             except ErreurImmich as e:
