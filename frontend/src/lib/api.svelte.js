@@ -37,6 +37,13 @@ export function pluriel(n, mot, motPluriel) {
   return `${n} ${n > 1 ? motPluriel || mot + 's' : mot}`
 }
 
+// Une date seule (« 12 avr. 2005 »), sans décalage de fuseau.
+export function dateJour(iso) {
+  if (!iso) return '—'
+  const [a, m, j] = iso.slice(0, 10).split('-').map(Number)
+  return new Date(a, m - 1, j).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 export function dateCourte(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })

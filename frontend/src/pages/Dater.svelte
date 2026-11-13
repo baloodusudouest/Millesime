@@ -1,5 +1,5 @@
 <script>
-  import { api, apercu, versImmich, visage } from '../lib/api.svelte.js'
+  import { api, apercu, dateJour, session, versImmich, visage } from '../lib/api.svelte.js'
   import Frise from '../components/Frise.svelte'
   import NommerGroupe from '../components/NommerGroupe.svelte'
   import Visionneuse from '../components/Visionneuse.svelte'
@@ -77,7 +77,19 @@
     erreur = ''
     try {
       const r = await api.post(`/api/scans/${s.asset_id}/valider`, { annee, marge })
-      message = { texte: `Datée ${annee} ±${marge}, rangée dans « ${r.album} ».`, journal: r.journal }
+      message = { texte: `Datée ${annee} ±${marge}` + (r.album ? `, rangée dans « ${r.album} ».` : ', laissée à sa place.') + (r.demande ? ' ' + r.demande : ''), journal: r.journal }
+      liste.splice(position, 1)
+      await chargerScan()
+    } catch (e) { erreur = e.message }
+    occupe = false
+  }
+  // 2.2.0 : la photo a déjà une date. On la garde (rien n'est écrit), ou on prend celle du nom du fichier.
+  async function garder(laquelle) {
+    occupe = true
+    erreur = ''
+    try {
+      const r = await api.post(`/api/scans/${s.asset_id}/garder`, { laquelle })
+      message = { texte: (laquelle === 'nom' ? `Datée du ${dateJour(r.date_gardee)}, d'après le nom du fichier.` : `Date d'Immich gardée (${dateJour(r.date_gardee)}) : rien n'a été écrit.`) + (r.demande ? ' ' + r.demande : ''), journal: r.journal }
       liste.splice(position, 1)
       await chargerScan()
     } catch (e) { erreur = e.message }
@@ -144,7 +156,26 @@
 
     <!-- Millésime proposé et actions -->
     <section aria-label="Année">
+      <p class="mb-3"><span class="origine origine-{s.origine}">{{ tag: 'Scan tagué', album: 'Album', dossier: 'Dossier' }[s.origine]}</span></p>
       {#if s.raison}<p class="mb-3 rounded-md border border-alerte/50 px-3 py-2 text-sm text-alerte">{s.raison}</p>{/if}
+
+      {#if s.comparaison}
+        {@const c = s.comparaison}
+        <div class="mb-4 rounded-md border px-3 py-2 text-sm {c.coherent === false ? 'border-alerte/60' : 'border-filet'}" role="group" aria-label="Date déjà connue">
+          <dl class="grid gap-1">
+            {#if c.date_connue}<div class="flex justify-between gap-3"><dt class="secondaire">Date dans Immich</dt><dd>{dateJour(c.date_connue)}</dd></div>{/if}
+            {#if c.date_nom}<div class="flex justify-between gap-3"><dt class="secondaire">Dans le nom du fichier</dt><dd>{dateJour(c.date_nom)}</dd></div>{/if}
+            {#if c.annee_estimee !== null}<div class="flex justify-between gap-3"><dt class="secondaire">Estimée par Millésime</dt><dd>{c.annee_estimee} ±{c.marge}</dd></div>{/if}
+          </dl>
+          <p class="mt-2 font-semibold {c.coherent === false ? 'text-alerte' : c.coherent ? 'text-or' : ''}">{c.phrase}</p>
+          <p class="secondaire mt-1">Quelle date choisir ?</p>
+          <div class="mt-2 grid gap-2">
+            {#if c.date_connue}<button class="bouton" onclick={() => garder('actuelle')} disabled={occupe}>Garder la date d'Immich ({c.date_connue.slice(0, 4)})</button>{/if}
+            {#if c.date_nom}<button class="bouton" onclick={() => garder('nom')} disabled={occupe || session.lecture_seule}>Prendre celle du nom du fichier ({c.date_nom.slice(0, 4)})</button>{/if}
+          </div>
+          <p class="secondaire mt-2 text-xs">Ou règle l'année ci-dessous et valide : c'est l'estimation qui sera écrite.</p>
+        </div>
+      {/if}
 
       <div class="flex items-center gap-2">
         <button class="bouton w-11 px-0 text-xl" onclick={() => changer(-1)} aria-label="Année précédente">−</button>

@@ -65,8 +65,20 @@ def construire():
         ajouter(f"num{an}", date(an, 3, 1), ["julien"], None, f"{an}-03-01T09:00:00.000Z")
     albums["al-nd"] = {"id": "al-nd", "albumName": "Non datées Numérisation",
                        "assets": {a for a in tag_assets["t-nd"]}}
+    vraies_sources = {}
+    # 2.2.0 : un album et un dossier de vieilles numérisations, sans tag. Leur date dans Immich est celle
+    # de la numérisation (2003), pas celle de la prise de vue ; un nom de fichier porte parfois une date.
+    for i, (an, nom) in enumerate(((1995, "IMG_0001.jpg"), (1997, "scan 1997-08-14.jpg"), (1999, "IMG_0003.jpg"))):
+        ajouter(f"alb{i}", date(an, 7, 1), ["julien", "alex"], None, "2003-11-02T10:00:00.000Z", envoi="2020-01-05T10:00:00.000Z")
+        assets[f"alb{i}"].update(originalFileName=nom, originalPath=f"/bibliotheque/Albums/Vieux scans/{nom}")
+        vraies_sources[f"alb{i}"] = an
+    albums["al-vieux"] = {"id": "al-vieux", "albumName": "Vieux scans", "assets": {"alb0", "alb1", "alb2"}}
+    for i, an in enumerate((1991, 1996)):
+        ajouter(f"dos{i}", date(an, 7, 1), ["mamie", "julien"], None, f"{an}-07-0{i + 2}T10:00:00.000Z", envoi="2021-03-01T10:00:00.000Z")
+        assets[f"dos{i}"].update(originalFileName=f"photo{i}.jpg", originalPath=f"/bibliotheque/Avant/Numérisations 2010/photo{i}.jpg")
+        vraies_sources[f"dos{i}"] = an
     return {"personnes": personnes, "tags": tags, "assets": assets, "tag_assets": tag_assets,
-            "albums": albums, "verite": verite, "vraies": vraies, "ecritures": []}
+            "albums": albums, "verite": verite, "vraies": vraies, "vraies_sources": vraies_sources, "ecritures": []}
 
 
 def demarrer():
@@ -119,6 +131,13 @@ def demarrer():
                 return self._json(list(E["tags"].values()))
             if chemin == "/api/faces":
                 return self._json(E["assets"][q["id"]]["faces"])
+            if chemin == "/api/view/folder/unique-paths":
+                return self._json(sorted({a["originalPath"].rsplit("/", 1)[0] for a in E["assets"].values() if a.get("originalPath")}))
+            if chemin == "/api/view/folder":
+                from urllib.parse import unquote
+                voulu = unquote(q.get("path", "").replace("+", " "))
+                return self._json([self._asset_public(a) for a in E["assets"].values()
+                                   if a.get("originalPath", "").rsplit("/", 1)[0] == voulu])
             if chemin == "/api/albums":
                 if "assetId" in q:
                     return self._json([self._album_public(a) for a in E["albums"].values() if q["assetId"] in a["assets"]])
@@ -156,6 +175,8 @@ def demarrer():
             if self.path == "/api/search/metadata":
                 if "tagIds" in c:
                     ids = sorted(E["tag_assets"].get(c["tagIds"][0], set()))
+                elif "albumIds" in c:
+                    ids = sorted(E["albums"].get(c["albumIds"][0], {"assets": set()})["assets"])
                 else:
                     pid = c["personIds"][0]
                     ids = sorted(a for a, x in E["assets"].items()

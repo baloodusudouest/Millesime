@@ -134,3 +134,51 @@ def test_20_connexion_par_service_et_reglages(page):
     page.get_by_role("heading", name="Réglages").wait_for()
     page.get_by_role("button", name="Se déconnecter").click()
     page.get_by_role("button", name="Se connecter").wait_for()
+
+
+def test_220_sources_code_couleur_et_ajout(page):
+    aller(page, "Réglages")
+    page.get_by_role("heading", name="Ce que Millésime date").wait_for()
+    legende = page.get_by_label("Légende des couleurs")
+    assert legende.locator(".origine").all_inner_texts() == ["Scan tagué", "Album", "Dossier"]
+    couleurs = legende.locator(".origine").evaluate_all("els => els.map(e => getComputedStyle(e).color)")
+    assert len(set(couleurs)) == 3                                                       # trois origines, trois couleurs
+    sources = page.get_by_role("list", name="Sources")
+    sources.locator("li").first.wait_for()
+    assert sources.locator("li").nth(0).locator(".origine").inner_text() == "Scan tagué"
+    assert sources.locator("li .origine-dossier").count() == 1
+    # Choisir un album : la liste se filtre, on en coche un, on ferme sans ajouter (le serveur est partagé)
+    page.get_by_role("button", name="Ajouter des albums").click()
+    choix = page.get_by_role("group", name="Choisir des albums")
+    choix.wait_for()
+    choix.get_by_placeholder("Filtrer les albums").fill("vieux")
+    assert choix.locator("li").count() == 1 and "Vieux scans" in choix.locator("li").inner_text()
+    choix.get_by_role("checkbox").check()
+    assert choix.get_by_role("button", name="Ajouter (1)").is_enabled()
+    choix.get_by_role("button", name="Fermer").click()
+    page.get_by_role("button", name="Ajouter des dossiers").click()
+    page.get_by_role("group", name="Choisir des dossiers").wait_for()
+    assert page.get_by_role("heading", name="Albums des scans tagués").count() == 1
+    assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
+
+
+def test_220_une_date_deja_la_est_comparee(page):
+    aller(page, "À traiter") if False else None
+    page.goto(page.url.split("#")[0] + "#dater")
+    page.locator("section[aria-label='Année']").wait_for()
+    for _ in range(14):                                                                  # jusqu'à une photo du dossier choisi
+        if page.get_by_role("group", name="Date déjà connue").count():
+            break
+        page.get_by_role("button", name="Passer").click()
+        page.wait_for_timeout(250)
+    bloc = page.get_by_role("group", name="Date déjà connue")
+    bloc.wait_for()
+    texte = bloc.inner_text()
+    assert "Date dans Immich" in texte and "Estimée par Millésime" in texte and "Quelle date choisir ?" in texte
+    assert "Cohérent" in texte or "Incohérence" in texte
+    assert page.locator("section[aria-label='Année'] .origine").inner_text() == "Dossier"
+    bloc.get_by_role("button", name=re.compile("Garder la date d'Immich")).click()
+    message = page.get_by_role("status").filter(has_text="rien n'a été écrit")
+    message.wait_for()
+    message.get_by_role("button", name="Annuler").click()                                # le serveur est partagé : on remet
+    assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0

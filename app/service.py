@@ -23,6 +23,19 @@ def maintenant() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+_DATE_DANS_NOM = re.compile(r"(?<!\d)((?:19|20)\d{2})[-_. ]?(0[1-9]|1[0-2])[-_. ]?(0[1-9]|[12]\d|3[01])(?!\d)")
+
+
+def dates_connues(a: dict, deja_estime: bool = False) -> tuple[str | None, str | None]:
+    """La date que la photo porte déjà, hors de toute estimation : celle d'Immich (EXIF) quand ce n'est pas
+    le 1900 des scans non datés, et celle écrite dans le nom du fichier (AAAAMMJJ, AAAA-MM-JJ)."""
+    brut = ((a.get("exifInfo") or {}).get("dateTimeOriginal") or a.get("localDateTime") or "")[:10]
+    connue = brut if re.fullmatch(r"\d{4}-\d{2}-\d{2}", brut) and int(brut[:4]) > 1901 and not deja_estime else None
+    m = _DATE_DANS_NOM.search(a.get("originalFileName") or "")
+    du_nom = f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m and int(m.group(1)) <= datetime.now().year else None
+    return connue, du_nom
+
+
 class ErreurMillesime(Exception):
     pass
 
@@ -93,6 +106,25 @@ class Millesime:
                     if a["id"] not in vus:
                         vus.add(a["id"])
                         self._enregistrer_scan(a["id"], "datee", d, None, None, False)
+            # 2.2.0 : les albums et les dossiers choisis dans l'appli. Toutes leurs images sont à dater,
+            # sauf celles déjà vues par un tag (le tag passe devant) ; une image déjà estimée est comptée faite.
+            for src in self.base.tous("SELECT * FROM sources ORDER BY ajoutee_le"):
+                try:
+                    photos = self.immich.photos_album(src["ref"]) if src["sorte"] == "album" else self.immich.photos_dossier(src["ref"])
+                except ErreurImmich as e:
+                    # Un album supprimé ou un dossier parti (migration) : on garde ce qu'on connaît, on le dit
+                    log.warning("Source illisible (%s) : %s", src["sorte"], e)
+                    vus.update(r["asset_id"] for r in self.base.tous("SELECT asset_id FROM scans WHERE source=?", src["cle"]))
+                    continue
+                for a in photos:
+                    if a["id"] in vus:
+                        continue
+                    vus.add(a["id"])
+                    envoi = est.parse_date(a.get("createdAt") or a.get("fileCreatedAt"))
+                    self._enregistrer_scan(a["id"], "non_datee", None, envoi.isoformat() if envoi else None,
+                                           envoi.year if envoi else None, a["id"] in estimees, source=src["cle"])
+                    connue, du_nom = dates_connues(a, a["id"] in estimees)
+                    self.base.executer("UPDATE scans SET date_connue=?, date_nom=? WHERE asset_id=?", connue, du_nom, a["id"])
             # scans disparus d'Immich (ou retagués) : retirés
             for r in self.base.tous("SELECT asset_id FROM scans"):
                 if r["asset_id"] not in vus:
@@ -111,18 +143,18 @@ class Millesime:
         finally:
             self.verrou_synchro.release()
 
-    def _enregistrer_scan(self, asset_id, type_, date_tampon, lot, annee_envoi, deja_estime):
+    def _enregistrer_scan(self, asset_id, type_, date_tampon, lot, annee_envoi, deja_estime, source=None):
         existant = self.base.un("SELECT * FROM scans WHERE asset_id=?", asset_id)
         if existant:
             self.base.executer("UPDATE scans SET type=?, date_tampon=?, lot=COALESCE(?, lot), "
-                               "annee_envoi=COALESCE(?, annee_envoi) WHERE asset_id=?",
-                               type_, date_tampon, lot, annee_envoi, asset_id)
+                               "annee_envoi=COALESCE(?, annee_envoi), source=? WHERE asset_id=?",
+                               type_, date_tampon, lot, annee_envoi, source, asset_id)
             if deja_estime and existant["statut"] != "validee":
                 self.base.executer("UPDATE scans SET statut='validee' WHERE asset_id=?", asset_id)
         else:
-            self.base.executer("INSERT INTO scans(asset_id, type, date_tampon, lot, annee_envoi, statut) "
-                               "VALUES(?,?,?,?,?,?)", asset_id, type_, date_tampon, lot, annee_envoi,
-                               "validee" if deja_estime else ("a_analyser" if type_ == "non_datee" else "datee"))
+            self.base.executer("INSERT INTO scans(asset_id, type, date_tampon, lot, annee_envoi, statut, source) "
+                               "VALUES(?,?,?,?,?,?,?)", asset_id, type_, date_tampon, lot, annee_envoi,
+                               "validee" if deja_estime else ("a_analyser" if type_ == "non_datee" else "datee"), source)
 
     def _synchro_visages(self, asset_id: str) -> int:
         faces = self.immich.visages(asset_id)
@@ -322,8 +354,9 @@ class Millesime:
 
     def liste(self, statut: str) -> list[dict]:
         ordre = "marge ASC, asset_id" if statut == "a_dater" else "asset_id"
-        return self.base.tous(f"SELECT asset_id, annee_proposee, marge, raison FROM scans "
-                              f"WHERE type='non_datee' AND statut=? ORDER BY {ordre}", statut)
+        return [{**r, "origine": (r.pop("source") or "tag:").split(":", 1)[0]} for r in self.base.tous(
+            f"SELECT asset_id, annee_proposee, marge, raison, source FROM scans "
+            f"WHERE type='non_datee' AND statut=? ORDER BY {ordre}", statut)]
 
     def scan(self, asset_id: str) -> dict:
         s = self.base.un("SELECT * FROM scans WHERE asset_id=?", asset_id)
@@ -350,6 +383,8 @@ class Millesime:
                 v["etat"] = "groupe_sans_nom"
             else:
                 v["etat"] = "nomme"
+        s["origine"] = (s.get("source") or "tag:").split(":", 1)[0]
+        s["comparaison"] = self._comparer(s)
         etats = {v["face_id"]: v["etat"] for v in s["visages"]}
         s["lien_immich"] = f"{self.cfg.immich_lien}/photos/{asset_id}"
         # groupes sans nom présents sur la photo, avec leur nombre total de visages (pour les nommer sur place)
@@ -370,6 +405,60 @@ class Millesime:
         s["sans_personne"] = [{"face_id": v["face_id"], "etat": v["etat"]} for v in s["visages"]
                               if v["etat"] in ("non_attribue", "supprime")]
         return s
+
+    @staticmethod
+    def _comparer(s: dict) -> dict | None:
+        """2.2.0 : la photo porte déjà une date (Immich, nom du fichier). On la met en regard de l'estimation,
+        on dit s'il y a une incohérence, et c'est l'utilisateur qui choisit."""
+        connue, du_nom = s.get("date_connue"), s.get("date_nom")
+        if not connue and not du_nom:
+            return None
+        estimee, marge = s.get("annee_proposee"), s.get("marge") or 0
+        annees = {int(d[:4]) for d in (connue, du_nom) if d}
+        ecart = max(abs(a - estimee) for a in annees) if estimee is not None else None
+        entre_elles = bool(connue and du_nom and connue[:4] != du_nom[:4])
+        if estimee is None:
+            coherent, phrase = (None if not entre_elles else False,
+                                "La date d'Immich et celle du nom du fichier ne disent pas la même année." if entre_elles
+                                else "Pas encore d'estimation à comparer.")
+        elif ecart > marge + 1 or entre_elles:
+            coherent = False
+            phrase = (f"Incohérence : {ecart} an{'s' if ecart > 1 else ''} d'écart avec l'estimation ({estimee} ±{marge})."
+                      if ecart > marge + 1 else "La date d'Immich et celle du nom du fichier ne disent pas la même année.")
+        else:
+            coherent, phrase = True, f"Cohérent avec l'estimation ({estimee} ±{marge})."
+        return {"date_connue": connue, "date_nom": du_nom if du_nom != connue else None, "annee_estimee": estimee,
+                "marge": marge if estimee is not None else None, "coherent": coherent, "phrase": phrase}
+
+    def garder_date(self, asset_id: str, laquelle: str) -> dict:
+        """La photo garde sa date d'Immich (rien n'est écrit), ou prend celle de son nom de fichier (une écriture,
+        annulable). Dans les deux cas elle est comptée comme datée."""
+        s = self.base.un("SELECT * FROM scans WHERE asset_id=? AND type='non_datee'", asset_id)
+        if not s:
+            raise ErreurMillesime("Scan inconnu.")
+        choisie = {"actuelle": s.get("date_connue"), "nom": s.get("date_nom")}.get(laquelle)
+        if not choisie:
+            raise ErreurMillesime("Cette photo n'a pas cette date.")
+        avant = {"statut": s["statut"]}
+        apres = {"origine": laquelle, "date_gardee": choisie}
+        if laquelle == "nom":
+            a = self.immich.asset(asset_id)
+            avant["date"] = (a.get("exifInfo") or {}).get("dateTimeOriginal") or a.get("localDateTime")
+            apres["date"] = f"{choisie}T12:00:00.000Z"
+        jid = self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
+                                 asset_id, "valider" if laquelle == "nom" else "garder", json.dumps(avant), json.dumps(apres), maintenant())
+        if laquelle == "nom":
+            try:
+                self.immich.changer_date(asset_id, apres["date"])
+            except ErreurImmich as e:
+                apres["erreur"] = str(e)
+                self.base.executer("UPDATE journal SET apres=? WHERE id=?", json.dumps(apres), jid)
+                raise ErreurMillesime(f"Écriture interrompue ({e}). Voir le journal pour annuler.") from e
+        self.base.executer("UPDATE scans SET statut='validee', annee_validee=?, vu_le=? WHERE asset_id=?",
+                           int(choisie[:4]), maintenant(), asset_id)
+        if s.get("source"):
+            apres["demande"] = self._demande_si_fini(s["source"])
+        return {"journal": jid, **apres}
 
     def actualiser_scan(self, asset_id: str) -> dict:
         """Relit tout de suite dans Immich les visages et les noms d'une photo, puis recalcule sa proposition."""
@@ -417,8 +506,11 @@ class Millesime:
         avant = {"date": (a.get("exifInfo") or {}).get("dateTimeOriginal") or a.get("localDateTime"),
                  "tags_estimes": [{"id": t["id"], "valeur": t.get("value")} for t in tags_estimes],
                  "albums": albums_avant, "statut": s["statut"]}
-        apres = {"date": f"{annee}-07-01T12:00:00.000Z", "tag": f"{self.cfg.tag_estimee}/{annee} ±{marge}",
-                 "album": self.cfg.modele_album.format(annee=annee)}
+        apres = {"date": f"{annee}-07-01T12:00:00.000Z", "tag": f"{self.cfg.tag_estimee}/{annee} ±{marge}"}
+        if not s.get("source"):
+            if not self.modele_album or not self.album_non_datees:
+                raise ErreurMillesime("Les deux noms d'albums des scans ne sont pas réglés : renseigne-les dans Réglages. Rien n'a été modifié.")
+            apres["album"] = self.modele_album.format(annee=annee)
         jid = self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
                                  asset_id, "valider", json.dumps(avant), json.dumps(apres), maintenant())
         try:
@@ -428,15 +520,18 @@ class Millesime:
             tag = self.immich.tag_existant_ou_cree(apres["tag"])
             self.immich.taguer(tag["id"], [asset_id])
             apres["tag_id"] = tag["id"]
-            nd = next((al for al in albums_avant if al["nom"] == self.cfg.album_non_datees), None)
-            if nd:
-                self.immich.retirer_album(nd["id"], [asset_id])
-            album = self._album_par_nom(apres["album"])
-            if album:
-                self.immich.ajouter_album(album["id"], [asset_id])
-            else:
-                album = self.immich.creer_album(apres["album"], [asset_id])
-            apres["album_id"] = album["id"]
+            if not s.get("source"):
+                # Un scan tagué quitte l'album des non datées pour celui de son année.
+                # Une photo d'un album ou d'un dossier choisi reste où elle est (2.2.0) : date et tag seulement.
+                nd = next((al for al in albums_avant if al["nom"] == self.album_non_datees), None)
+                if nd:
+                    self.immich.retirer_album(nd["id"], [asset_id])
+                album = self._album_par_nom(apres["album"])
+                if album:
+                    self.immich.ajouter_album(album["id"], [asset_id])
+                else:
+                    album = self.immich.creer_album(apres["album"], [asset_id])
+                apres["album_id"] = album["id"]
         except ErreurImmich as e:
             apres["erreur"] = str(e)
             self.base.executer("UPDATE journal SET apres=? WHERE id=?", json.dumps(apres), jid)
@@ -444,6 +539,8 @@ class Millesime:
         self.base.executer("UPDATE journal SET apres=? WHERE id=?", json.dumps(apres), jid)
         self.base.executer("UPDATE scans SET statut='validee', annee_validee=?, vu_le=? WHERE asset_id=?",
                            annee, maintenant(), asset_id)
+        if s.get("source"):
+            apres["demande"] = self._demande_si_fini(s["source"])
         return {"journal": jid, **apres}
 
     def plusieurs_annees(self, asset_id: str) -> dict:
@@ -455,6 +552,118 @@ class Millesime:
                                  json.dumps({"statut": "plusieurs"}), maintenant())
         self.base.executer("UPDATE scans SET statut='plusieurs', vu_le=? WHERE asset_id=?", maintenant(), asset_id)
         return {"journal": jid}
+
+    # ------------------------------------------------------------------ réglages et sources (2.2.0)
+    @property
+    def album_non_datees(self) -> str:
+        return self.base.lire("album_non_datees") or self.cfg.album_non_datees
+
+    @property
+    def modele_album(self) -> str:
+        return self.base.lire("modele_album") or self.cfg.modele_album
+
+    def regler_albums(self, album_non_datees: str, modele_album: str) -> dict:
+        album_non_datees, modele_album = (album_non_datees or "").strip(), (modele_album or "").strip()
+        if not album_non_datees:
+            raise ErreurMillesime("Le nom de l'album des scans non datés est vide.")
+        if "{annee}" not in modele_album:
+            raise ErreurMillesime("Le modèle d'album doit contenir {annee}, par exemple « {annee} Numérisation ».")
+        self.base.ecrire("album_non_datees", album_non_datees)
+        self.base.ecrire("modele_album", modele_album)
+        return self.sources()
+
+    def _source(self, cle: str) -> dict:
+        src = self.base.un("SELECT * FROM sources WHERE cle=?", cle)
+        if not src:
+            raise ErreurMillesime("Source inconnue.")
+        return src
+
+    def sources(self, avec_choix: bool = False) -> dict:
+        """Ce que Millésime date : les scans tagués, et les albums et dossiers choisis ici."""
+        comptes = {r["source"]: r for r in self.base.tous(
+            "SELECT source, COUNT(*) AS total, SUM(statut='validee') AS faites FROM scans "
+            "WHERE type='non_datee' GROUP BY source")}
+        tag = comptes.get(None, {"total": 0, "faites": 0})
+        liste = [{**s, "total": (comptes.get(s["cle"]) or {}).get("total", 0), "faites": (comptes.get(s["cle"]) or {}).get("faites") or 0}
+                 for s in self.base.tous("SELECT * FROM sources ORDER BY sorte, nom")]
+        sortie = {"tag": {"nom": f"{self.cfg.tag_prefixe}/{self.cfg.tag_non_datee}", "total": tag["total"], "faites": tag["faites"] or 0},
+                  "sources": liste,
+                  "albums": {"non_datees": self.album_non_datees, "modele": self.modele_album,
+                             "depuis_la_stack": not self.base.lire("album_non_datees") and bool(self.cfg.album_non_datees)},
+                  "transhumance": bool(self.cfg.jeton_transhumance)}
+        if avec_choix:
+            pris = {s["cle"] for s in liste}
+            sortie["choix"] = {
+                "albums": sorted(({"id": a["id"], "nom": a.get("albumName") or "", "nombre": a.get("assetCount", 0)}
+                                  for a in self.immich.albums() if "album:" + a["id"] not in pris),
+                                 key=lambda a: a["nom"].casefold()),
+                "dossiers": [d for d in self.immich.dossiers() if "dossier:" + d not in pris]}
+        return sortie
+
+    def ajouter_sources(self, sorte: str, refs: list[str]) -> dict:
+        """Ajoute des albums ou des dossiers à dater. Lecture seule d'Immich : rien n'y est écrit."""
+        if sorte not in ("album", "dossier") or not refs:
+            raise ErreurMillesime("Choix invalide.")
+        if sorte == "album":
+            connus = {a["id"]: a.get("albumName") or "" for a in self.immich.albums()}
+        else:
+            connus = {d: d.rstrip("/").rsplit("/", 1)[-1] for d in self.immich.dossiers()}
+        for ref in refs:
+            if ref not in connus:
+                raise ErreurMillesime("Album ou dossier inconnu d'Immich : recharge la liste.")
+            self.base.executer("INSERT OR IGNORE INTO sources(cle, sorte, ref, nom, ajoutee_le) VALUES(?,?,?,?,?)",
+                               f"{sorte}:{ref}", sorte, ref, connus[ref], maintenant())
+        return self.sources()
+
+    def retirer_source(self, cle: str) -> dict:
+        """Retire une source. Ses photos pas encore datées quittent Millésime ; celles déjà datées gardent
+        leur date dans Immich et leur ligne au journal."""
+        self._source(cle)
+        for r in self.base.tous("SELECT asset_id FROM scans WHERE source=? AND statut<>'validee'", cle):
+            self.base.executer("DELETE FROM visages WHERE asset_id=?", r["asset_id"])
+            self.base.executer("DELETE FROM scans WHERE asset_id=?", r["asset_id"])
+        self.base.executer("UPDATE scans SET source=NULL WHERE source=?", cle)
+        self.base.executer("DELETE FROM sources WHERE cle=?", cle)
+        return self.sources()
+
+    def _demande_si_fini(self, cle: str) -> str:
+        """Un dossier choisi dont toutes les photos sont datées : la demande de passage part vers Transhumance.
+        Rend ce qui s'est passé, en clair ; ne lève jamais (la validation est déjà écrite)."""
+        src = self.base.un("SELECT * FROM sources WHERE cle=?", cle)
+        if not src or src["sorte"] != "dossier" or src["demandee_le"]:
+            return ""
+        reste = self.base.valeur("SELECT COUNT(*) FROM scans WHERE source=? AND statut<>'validee'", cle)
+        if reste:
+            return ""
+        try:
+            return self.demander_passage(cle)
+        except ErreurMillesime as e:
+            return str(e)
+
+    def demander_passage(self, cle: str) -> str:
+        """Demande à Transhumance de faire passer ce dossier. Transhumance le note et le montre ;
+        il ne lance rien de lui-même."""
+        import requests
+        src = self._source(cle)
+        if src["sorte"] != "dossier":
+            raise ErreurMillesime("Seul un dossier se demande à Transhumance : un album est déjà dans Immich.")
+        if not self.cfg.jeton_transhumance:
+            raise ErreurMillesime("Transhumance n'est pas réglé (MILLESIME_JETON_TRANSHUMANCE) : la demande n'est pas partie.")
+        try:
+            r = requests.post(self.cfg.transhumance_url + "/externe/demandes", timeout=15,
+                              headers={"Authorization": f"Bearer {self.cfg.jeton_transhumance}"},
+                              json={"dossier": src["ref"], "de": "Millésime"})
+        except requests.RequestException as e:
+            raise ErreurMillesime(f"Transhumance ne répond pas ({e.__class__.__name__}) : la demande n'est pas partie.") from e
+        if r.status_code >= 400:
+            detail = ""
+            try:
+                detail = r.json().get("detail", "")
+            except ValueError:
+                pass
+            raise ErreurMillesime(f"Transhumance a refusé la demande ({r.status_code}). {detail}".strip())
+        self.base.executer("UPDATE sources SET demandee_le=? WHERE cle=?", maintenant(), cle)
+        return "Demande de passage envoyée à Transhumance."
 
     def journal(self, n: int = 100) -> list[dict]:
         lignes = self.base.tous("SELECT * FROM journal ORDER BY id DESC LIMIT ?", n)
@@ -489,7 +698,7 @@ class Millesime:
             if apres.get("album_id") and apres["album_id"] not in {a["id"] for a in avant.get("albums", [])}:
                 self.immich.retirer_album(apres["album_id"], [aid])
             for al in avant.get("albums", []):
-                if al["nom"] == self.cfg.album_non_datees:
+                if al["nom"] == self.album_non_datees:
                     self.immich.ajouter_album(al["id"], [aid])
         self.base.executer("UPDATE journal SET annule_le=? WHERE id=?", maintenant(), journal_id)
         self.base.executer("UPDATE scans SET statut='a_analyser', annee_validee=NULL WHERE asset_id=?", aid)

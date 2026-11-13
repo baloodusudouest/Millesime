@@ -30,6 +30,9 @@ class Config:
     # au réseau Docker). Vide : le navigateur ouvre Immich sur la même machine que Millésime, port 2283.
     immich_lien: str = ""
     lecture_seule: bool = False     # 1.6.0 : aucune écriture dans Immich
+    # 2.2.0 : demande de passage envoyée à Transhumance quand un dossier choisi est entièrement daté
+    transhumance_url: str = "http://transhumance:8097"
+    jeton_transhumance: str = ""    # le même que TRANSHUMANCE_JETON_MILLESIME ; vide : aucune demande n'est envoyée
 
     @classmethod
     def depuis_env(cls) -> "Config":
@@ -42,12 +45,13 @@ class Config:
         # 1.5.1 : les noms de tags et d'albums sont propres à chaque photothèque. Ils ne sont plus
         # écrits dans le code (dépôt public) : la stack les donne, et Millésime refuse de démarrer
         # sans eux plutôt que d'écrire sous un nom par défaut.
+        # 2.2.0 : seul le préfixe des tags reste obligatoire dans la stack. Les deux noms d'albums se règlent
+        # dans l'appli (Réglages) ; les variables, si elles sont là, en donnent la valeur de départ.
         noms = {v: _env(v) for v in ("MILLESIME_TAG_PREFIXE", "MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM")}
-        absents = [v for v, x in noms.items() if not x]
-        if absents:
-            raise RuntimeError("Variable(s) absente(s) : " + ", ".join(absents) + ". À définir dans la stack avec les noms "
-                               "réels des tags et des albums d'Immich (voir le README).")
-        if "{annee}" not in noms["MILLESIME_MODELE_ALBUM"]:
+        if not noms["MILLESIME_TAG_PREFIXE"]:
+            raise RuntimeError("Variable(s) absente(s) : MILLESIME_TAG_PREFIXE. À définir dans la stack avec le nom "
+                               "réel du préfixe des tags de numérisation dans Immich (voir le README).")
+        if noms["MILLESIME_MODELE_ALBUM"] and "{annee}" not in noms["MILLESIME_MODELE_ALBUM"]:
             raise RuntimeError("MILLESIME_MODELE_ALBUM doit contenir {annee}, par exemple « {annee} Numérisation ».")
         etat = Path(_env("MILLESIME_ETAT", "/state"))
         etat.mkdir(parents=True, exist_ok=True)
@@ -68,4 +72,6 @@ class Config:
             synchro_minutes=int(_env("MILLESIME_SYNCHRO_MINUTES", "60")),
             immich_lien=_env("MILLESIME_IMMICH_LIEN").rstrip("/"),
             lecture_seule=_env("MILLESIME_LECTURE_SEULE").lower() in ("oui", "1", "true", "yes"),
+            transhumance_url=_env("MILLESIME_TRANSHUMANCE_URL", "http://transhumance:8097").rstrip("/"),
+            jeton_transhumance=_env("MILLESIME_JETON_TRANSHUMANCE"),
         )

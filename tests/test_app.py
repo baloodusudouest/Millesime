@@ -461,10 +461,13 @@ def test_151_noms_obligatoires_et_tag_introuvable(env, monkeypatch):
     client.post("/api/synchroniser")
     avant = client.get("/api/accueil").json()["compteurs"]
     assert avant["total"] > 0
-    for v in ("MILLESIME_TAG_PREFIXE", "MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM"):
+    monkeypatch.delenv("MILLESIME_TAG_PREFIXE")
+    with pytest.raises(RuntimeError, match="MILLESIME_TAG_PREFIXE"):
+        Config.depuis_env()
+    noms_de_test(monkeypatch)
+    for v in ("MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM"):       # 2.2.0 : réglables dans l'appli
         monkeypatch.delenv(v)
-        with pytest.raises(RuntimeError, match=v):
-            Config.depuis_env()
+        Config.depuis_env()
         noms_de_test(monkeypatch)
     monkeypatch.setenv("MILLESIME_MODELE_ALBUM", "Numérisation")
     with pytest.raises(RuntimeError, match="annee"):
@@ -538,3 +541,148 @@ def test_160_lecture_seule_rien_n_est_ecrit(env):
     with pytest.raises(LectureSeule):
         mm.immich.changer_date(cible, "2000-07-01T12:00:00.000Z")             # dernier filet, au plus près du réseau
     assert E["requetes"] == []
+
+
+# ------------------------------------------------------------------ 2.2.0 : albums et dossiers choisis
+
+DOSSIER = "/bibliotheque/Avant/Numérisations 2010"
+
+
+def _avec_sources(client, E):
+    connecter(client)
+    choix = client.get("/api/sources?choix=true").json()["choix"]
+    assert {"id": "al-vieux", "nom": "Vieux scans", "nombre": 3} in choix["albums"] and DOSSIER in choix["dossiers"]
+    client.post("/api/sources", json={"sorte": "album", "refs": ["al-vieux"]})
+    r = client.post("/api/sources", json={"sorte": "dossier", "refs": [DOSSIER]}).json()
+    assert [(s["sorte"], s["nom"]) for s in r["sources"]] == [("album", "Vieux scans"), ("dossier", "Numérisations 2010")]
+    client.post("/api/synchroniser")
+    calculer(client, E)
+    return client.get("/api/sources").json()
+
+
+def test_220_albums_et_dossiers_choisis(env):
+    client, E = env
+    r = _avec_sources(client, E)
+    assert {s["cle"]: s["total"] for s in r["sources"]} == {"album:al-vieux": 3, f"dossier:{DOSSIER}": 2}
+    assert r["tag"]["total"] == 8                                                # les scans tagués n'ont pas bougé
+    choix = client.get("/api/sources?choix=true").json()["choix"]
+    assert "al-vieux" not in {a["id"] for a in choix["albums"]} and DOSSIER not in choix["dossiers"]   # déjà pris
+    listes = [x for st in ("a_dater", "a_trancher") for x in client.get(f"/api/scans?statut={st}").json()]
+    assert {x["origine"] for x in listes} == {"tag", "album", "dossier"}
+    # Valider une photo d'album : la date et le tag, aucun mouvement d'album
+    E["requetes"].clear()
+    r = client.post("/api/scans/alb0/valider", json={"annee": 1995, "marge": 2}).json()
+    assert "album" not in r and r["demande"] == ""
+    assert [(m, c) for m, c, _ in E["requetes"]] == [("PUT", "/api/assets/alb0"), ("PUT", "/api/tags"),
+                                                     ("PUT", f"/api/tags/{r['tag_id']}/assets")]
+    assert "alb0" in E["albums"]["al-vieux"]["assets"]
+    j = client.get("/api/journal").json()[0]
+    assert client.post(f"/api/journal/{j['id']}/annuler").json()["ok"]
+    assert E["assets"]["alb0"]["exifInfo"]["dateTimeOriginal"].startswith("2003-11-02")
+    # Refus
+    assert client.post("/api/sources", json={"sorte": "album", "refs": ["inconnu"]}).status_code == 400
+    assert client.post("/api/sources", json={"sorte": "autre", "refs": ["x"]}).status_code == 400
+    assert client.post("/api/sources/retirer", json={"cle": "album:inconnu"}).status_code == 400
+    # Retirer une source : ses photos pas encore datées quittent Millésime, rien n'est écrit dans Immich
+    E["requetes"].clear()
+    r = client.post("/api/sources/retirer", json={"cle": "album:al-vieux"}).json()
+    assert [s["cle"] for s in r["sources"]] == [f"dossier:{DOSSIER}"] and E["requetes"] == []
+    assert client.get("/api/scans/alb1").status_code == 400
+    client.post("/api/synchroniser")
+    assert client.get("/api/scans/alb1").status_code == 400 and client.get("/api/scans/dos0").status_code == 200
+
+
+def test_220_date_deja_la_comparee_a_l_estimation(env):
+    client, E = env
+    _avec_sources(client, E)
+    c = client.get("/api/scans/alb0").json()["comparaison"]                     # Immich dit 2003, la photo est de 1995
+    assert c["date_connue"] == "2003-11-02" and c["date_nom"] is None and c["coherent"] is False and "Incohérence" in c["phrase"]
+    c = client.get("/api/scans/alb1").json()["comparaison"]                     # le nom du fichier dit 1997
+    assert c["date_nom"] == "1997-08-14" and c["coherent"] is False
+    c = client.get("/api/scans/dos0").json()["comparaison"]                     # Immich dit 1991, l'estimation aussi
+    assert c["date_connue"] == "1991-07-02" and c["coherent"] is True and "Cohérent" in c["phrase"]
+    assert client.get("/api/scans/nd0").json()["comparaison"] is None            # un scan non daté (1900) n'a pas de date
+    # Garder la date d'Immich : rien n'est écrit, la photo est comptée datée, et cela s'annule
+    E["requetes"].clear()
+    r = client.post("/api/scans/dos0/garder", json={"laquelle": "actuelle"}).json()
+    assert E["requetes"] == [] and r["date_gardee"] == "1991-07-02"
+    s = client.get("/api/scans/dos0").json()
+    assert (s["statut"], s["annee_validee"]) == ("validee", 1991)
+    assert client.post(f"/api/journal/{r['journal']}/annuler").json()["ok"] and E["requetes"] == []
+    assert client.get("/api/scans/dos0").json()["statut"] != "validee"
+    # Prendre la date du nom du fichier : une écriture, annulable
+    r = client.post("/api/scans/alb1/garder", json={"laquelle": "nom"}).json()
+    assert E["assets"]["alb1"]["exifInfo"]["dateTimeOriginal"] == "1997-08-14T12:00:00.000Z"
+    assert client.post(f"/api/journal/{r['journal']}/annuler").json()["ok"]
+    assert E["assets"]["alb1"]["exifInfo"]["dateTimeOriginal"].startswith("2003-11-02")
+    assert client.post("/api/scans/alb0/garder", json={"laquelle": "nom"}).status_code == 400       # pas de date dans son nom
+    assert client.post("/api/scans/nd0/garder", json={"laquelle": "actuelle"}).status_code == 400
+
+
+def test_220_dates_dans_les_noms():
+    from app.service import dates_connues
+    for nom, attendu in (("IMG_20050412_101500.jpg", "2005-04-12"), ("2005-04-12 plage.jpg", "2005-04-12"), ("scan 1997.08.14.jpg", "1997-08-14"),
+                         ("IMG_0001.jpg", None), ("DSC12345678.jpg", None), ("20991231.jpg", None), ("19051340.jpg", None)):
+        assert dates_connues({"originalFileName": nom})[1] == attendu, nom
+    assert dates_connues({"exifInfo": {"dateTimeOriginal": "1900-01-01T00:00:00.000Z"}})[0] is None
+    assert dates_connues({"localDateTime": "2003-11-02T10:00:00.000Z"})[0] == "2003-11-02"
+    assert dates_connues({"localDateTime": "2003-11-02T10:00:00.000Z"}, deja_estime=True)[0] is None
+
+
+def test_220_noms_d_albums_regles_dans_l_appli(env):
+    client, E = env
+    cible, s = _pret_a_dater(client, E)
+    assert client.get("/api/sources").json()["albums"] == {"non_datees": "Non datées Numérisation", "modele": "{annee} Numérisation", "depuis_la_stack": True}
+    assert client.post("/api/reglages/albums", json={"non_datees": "Non datées Numérisation", "modele": "Sans année"}).status_code == 400
+    assert client.post("/api/reglages/albums", json={"non_datees": "", "modele": "{annee} X"}).status_code == 400
+    r = client.post("/api/reglages/albums", json={"non_datees": "Non datées Numérisation", "modele": "Scans de {annee}"}).json()
+    assert r["albums"] == {"non_datees": "Non datées Numérisation", "modele": "Scans de {annee}", "depuis_la_stack": False}
+    r = client.post(f"/api/scans/{cible}/valider", json={"annee": s["annee_proposee"], "marge": s["marge"]}).json()
+    assert r["album"] == f"Scans de {s['annee_proposee']}" and cible not in E["albums"]["al-nd"]["assets"]
+    # Sans variable dans la stack ni réglage : valider un scan tagué est refusé net, avant toute écriture
+    from app import main
+    main.m().cfg.album_non_datees = main.m().cfg.modele_album = ""
+    main.m().base.executer("DELETE FROM reglages WHERE cle IN ('album_non_datees', 'modele_album')")
+    autre = client.get("/api/scans?statut=a_dater").json()[0]["asset_id"]
+    E["requetes"].clear()
+    r = client.post(f"/api/scans/{autre}/valider", json={"annee": 1995, "marge": 2})
+    assert r.status_code == 400 and "Réglages" in r.json()["detail"] and E["requetes"] == []
+
+
+def test_220_demande_a_transhumance(env, monkeypatch):
+    """Un dossier choisi dont toutes les photos sont datées : la demande de passage part vers Transhumance."""
+    import requests
+    client, E = env
+    _avec_sources(client, E)
+    from app import main
+    envois = []
+
+    class Reponse:
+        status_code = 200
+        def json(self):
+            return {"ok": True}
+    vrai_post = requests.post
+
+    def faux_post(url, **kw):
+        if "/externe/demandes" not in url:
+            return vrai_post(url, **kw)
+        envois.append((url, kw["headers"]["Authorization"], kw["json"]))
+        return Reponse()
+    monkeypatch.setattr(requests, "post", faux_post)
+    cle = f"dossier:{DOSSIER}"
+    # Sans jeton : rien ne part, et c'est dit
+    r = client.post("/api/scans/dos0/garder", json={"laquelle": "actuelle"}).json()
+    assert r["demande"] == "" and envois == []                                   # il reste une photo
+    r = client.post("/api/scans/dos1/garder", json={"laquelle": "actuelle"}).json()
+    assert "n'est pas réglé" in r["demande"] and envois == []
+    assert client.post("/api/sources/demander", json={"cle": cle}).status_code == 400
+    assert client.post("/api/sources/demander", json={"cle": "album:al-vieux"}).status_code == 400   # un album ne se demande pas
+    main.m().cfg.jeton_transhumance = "jeton-tr"
+    r = client.post("/api/sources/demander", json={"cle": cle}).json()
+    assert r["message"] == "Demande de passage envoyée à Transhumance."
+    assert envois == [("http://transhumance:8097/externe/demandes", "Bearer jeton-tr", {"dossier": DOSSIER, "de": "Millésime"})]
+    assert next(s for s in r["sources"] if s["cle"] == cle)["demandee_le"]
+    Reponse.status_code = 404
+    Reponse.json = lambda self: {"detail": "Dossier inconnu de Transhumance."}
+    r = client.post("/api/sources/demander", json={"cle": cle})
+    assert r.status_code == 400 and "Dossier inconnu" in r.json()["detail"]

@@ -92,6 +92,18 @@ class Immich:
         params = {"assetId": asset_id} if asset_id else None
         return self._json("GET", "/albums", params=params) or []
 
+    def photos_album(self, album_id: str) -> list[dict]:
+        """2.2.0 : les images d'un album."""
+        return self.rechercher({"albumIds": [album_id]})
+
+    def dossiers(self) -> list[str]:
+        """2.2.0 : les dossiers qu'Immich connaît (chemins des originaux), triés."""
+        return sorted(self._json("GET", "/view/folder/unique-paths") or [])
+
+    def photos_dossier(self, chemin: str) -> list[dict]:
+        """2.2.0 : les images rangées directement dans ce dossier (pas dans ses sous-dossiers)."""
+        return [a for a in (self._json("GET", "/view/folder", params={"path": chemin}) or []) if a.get("type") == "IMAGE"]
+
     # -- écriture -------------------------------------------------------------
     def changer_date(self, asset_id: str, iso: str) -> None:
         self._req("PUT", f"/assets/{asset_id}", json={"dateTimeOriginal": iso})
