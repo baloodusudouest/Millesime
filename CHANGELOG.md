@@ -1,5 +1,8 @@
 # Journal des versions
 
+
+## 2.7.2 — 14 novembre 2026
+- **Datables par le nom : la date en face du dossier.** Dans la liste de gauche, chaque dossier ou album a sa date proposée sur la même ligne, à droite de son nom. Une fois coché, elle devient un champ (vide : la date du nom ; sinon celle que tu tapes), avec en dessous la date qui sera écrite, ou « date illisible ». Le tableau à droite disparaît : il ne reste que le total, « Dater » et « Tout décocher ». La liste est plus large sur PC.
 ## 2.7.1 — 14 novembre 2026
 - **Datables par le nom : la liste de gauche est de nouveau lisible.** Depuis la 2.7.0, la case à cocher de chaque dossier prenait toute la largeur de la ligne (elle recevait le style du champ de recherche) : on ne voyait que de grandes cases vides, sans le nom des dossiers. La case reprend sa taille ; un test d'écran vérifie la largeur de la case et du nom.
 ## 2.7.0 — 14/11/2026

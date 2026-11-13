@@ -230,20 +230,25 @@ def test_270_plusieurs_dossiers_coches(page):
     page.goto(page.url.split("#")[0] + "#datables")
     lignes = page.locator(".ligne-groupe")
     lignes.first.wait_for()
-    # 2.7.1 : la case reste une case ; le nom du dossier garde la largeur de la ligne
-    ligne, case, nom = (lignes.first.bounding_box(), lignes.first.locator("input.coche").bounding_box(),
-                        lignes.first.locator("button.groupe").bounding_box())
-    assert case["width"] < 40 and nom["width"] > ligne["width"] * 0.7
+    # 2.7.1 : la case reste une case ; le nom du dossier garde sa place
+    case, nom = lignes.first.locator("input.coche").bounding_box(), lignes.first.locator("button.groupe").bounding_box()
+    assert case["width"] < 40 and nom["width"] > 120
+    # 2.7.2 : la date proposée est en face du dossier, sur la même ligne
+    proposee = lignes.first.locator(".proposee")
+    assert proposee.inner_text().strip()
+    b = proposee.bounding_box()
+    assert b["x"] > nom["x"] + nom["width"] - 1 and abs((b["y"] + b["height"] / 2) - (nom["y"] + nom["height"] / 2)) < nom["height"] / 2
     for l in lignes.all():
         l.locator("input.coche").check()
     sel = page.get_by_role("region", name="Dossiers cochés")
     sel.wait_for()
-    assert sel.locator("tbody tr").count() == 2
-    champ = sel.locator("input.date").first
+    assert "2 dossiers ou albums cochés" in sel.inner_text()
+    champ = lignes.first.locator("input.date")
     champ.fill("31/02/1992")
     assert sel.get_by_role("button", name=re.compile("Dater les")).is_disabled()                 # date illisible
+    assert "date illisible" in lignes.first.inner_text()
     champ.fill("24/12/1992")
-    assert "24 décembre 1992" in sel.inner_text()
+    assert "24 décembre 1992" in lignes.first.inner_text()
     sel.get_by_role("button", name=re.compile("Dater les 2 photos des 2 dossiers")).click()
     sel.get_by_role("button", name=re.compile("Confirmer : dater les 2 photos")).wait_for()
     sel.get_by_role("button", name="Tout décocher").click()
