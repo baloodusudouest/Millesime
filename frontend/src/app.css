@@ -1,4 +1,10 @@
 @import "tailwindcss";
+/* Toujours sombre : « dark: » s'applique partout (comme l'Anneau) */
+@custom-variant dark {
+  @media all {
+    @slot;
+  }
+}
 
 /* Habillage commun aux applis (2.0.0), celui de carnet : minimalisme chaleureux, fonds neutres
    teintés, filets fins, sombre par défaut et clair quand l'appareil le demande.
@@ -28,17 +34,7 @@
 
 @layer base {
   html { color-scheme: dark; -webkit-text-size-adjust: 100%; }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --color-verre: #faf7f2; --color-verre-2: #f1ece3; --color-filet: #e3dbcd; --color-tranche: #cabfad;
-      --color-champ: #8c8275; --color-etiquette: #1e1a16; --color-craie: #6f665b;
-      --color-lie: #8e2a48; --color-sur-lie: #ffffff; --color-lie-fonce: #6b1f36;
-      --color-or: #8a6a12; --color-sur-or: #ffffff;
-      --color-alerte: #c0392b; --color-ombre: rgb(30 30 40 / 0.16);
-    }
-    html { color-scheme: light; }
-  }
-  body {
+    body {
     background: var(--color-verre); color: var(--color-etiquette);
     font-family: var(--font-sans); font-size: 15px; line-height: 1.5;
     -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01";
@@ -80,8 +76,7 @@
   .origine-tag { --teinte: var(--color-or); }
   .origine-album { --teinte: #6fb3e8; }
   .origine-dossier { --teinte: #e59a4a; }
-  @media (prefers-color-scheme: light) { .origine-album { --teinte: #1f6fb0; } .origine-dossier { --teinte: #a85a0c; } }
-  .champ { min-height: 2.75rem; width: 100%; padding: 0 0.75rem; font-size: 1rem; border: 1px solid var(--color-champ); border-radius: 8px; background: transparent; color: inherit; }
+    .champ { min-height: 2.75rem; width: 100%; padding: 0 0.75rem; font-size: 1rem; border: 1px solid var(--color-champ); border-radius: 8px; background: transparent; color: inherit; }
   .lien { color: var(--color-etiquette); text-decoration: underline; text-underline-offset: 3px;
           text-decoration-color: var(--color-champ); }
   .lien:hover { text-decoration-color: var(--color-lie); }
