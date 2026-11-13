@@ -100,12 +100,12 @@ class Millesime:
                     vus.add(a["id"])
                     envoi = est.parse_date(a.get("createdAt") or a.get("fileCreatedAt"))
                     self._enregistrer_scan(a["id"], "non_datee", None, envoi.isoformat() if envoi else None,
-                                           envoi.year if envoi else None, a["id"] in estimees)
+                                           envoi.year if envoi else None, a["id"] in estimees, chemin=a.get("originalPath"))
             for t, d in dates:
                 for a in self.immich.rechercher({"tagIds": [t["id"]]}):
                     if a["id"] not in vus:
                         vus.add(a["id"])
-                        self._enregistrer_scan(a["id"], "datee", d, None, None, False)
+                        self._enregistrer_scan(a["id"], "datee", d, None, None, False, chemin=a.get("originalPath"))
             # 2.2.0 : les albums et les dossiers choisis dans l'appli. Toutes leurs images sont à dater,
             # sauf celles déjà vues par un tag (le tag passe devant) ; une image déjà estimée est comptée faite.
             for src in self.base.tous("SELECT * FROM sources ORDER BY ajoutee_le"):
@@ -122,7 +122,8 @@ class Millesime:
                     vus.add(a["id"])
                     envoi = est.parse_date(a.get("createdAt") or a.get("fileCreatedAt"))
                     self._enregistrer_scan(a["id"], "non_datee", None, envoi.isoformat() if envoi else None,
-                                           envoi.year if envoi else None, a["id"] in estimees, source=src["cle"])
+                                           envoi.year if envoi else None, a["id"] in estimees, source=src["cle"],
+                                           chemin=a.get("originalPath"))
                     connue, du_nom = dates_connues(a, a["id"] in estimees)
                     self.base.executer("UPDATE scans SET date_connue=?, date_nom=? WHERE asset_id=?", connue, du_nom, a["id"])
             # scans disparus d'Immich (ou retagués) : retirés
@@ -143,8 +144,10 @@ class Millesime:
         finally:
             self.verrou_synchro.release()
 
-    def _enregistrer_scan(self, asset_id, type_, date_tampon, lot, annee_envoi, deja_estime, source=None):
+    def _enregistrer_scan(self, asset_id, type_, date_tampon, lot, annee_envoi, deja_estime, source=None, chemin=None):
         existant = self.base.un("SELECT * FROM scans WHERE asset_id=?", asset_id)
+        if chemin:                                       # 2.3.0 : pour filtrer « Dater » par dossier
+            self.base.executer("UPDATE scans SET chemin=? WHERE asset_id=?", chemin, asset_id) if existant else None
         if existant:
             self.base.executer("UPDATE scans SET type=?, date_tampon=?, lot=COALESCE(?, lot), "
                                "annee_envoi=COALESCE(?, annee_envoi), source=? WHERE asset_id=?",
@@ -152,9 +155,10 @@ class Millesime:
             if deja_estime and existant["statut"] != "validee":
                 self.base.executer("UPDATE scans SET statut='validee' WHERE asset_id=?", asset_id)
         else:
-            self.base.executer("INSERT INTO scans(asset_id, type, date_tampon, lot, annee_envoi, statut, source) "
-                               "VALUES(?,?,?,?,?,?,?)", asset_id, type_, date_tampon, lot, annee_envoi,
-                               "validee" if deja_estime else ("a_analyser" if type_ == "non_datee" else "datee"), source)
+            self.base.executer("INSERT INTO scans(asset_id, type, date_tampon, lot, annee_envoi, statut, source, chemin) "
+                               "VALUES(?,?,?,?,?,?,?,?)", asset_id, type_, date_tampon, lot, annee_envoi,
+                               "validee" if deja_estime else ("a_analyser" if type_ == "non_datee" else "datee"), source,
+                               chemin)
 
     def _synchro_visages(self, asset_id: str) -> int:
         faces = self.immich.visages(asset_id)
@@ -354,8 +358,13 @@ class Millesime:
 
     def liste(self, statut: str) -> list[dict]:
         ordre = "marge ASC, asset_id" if statut == "a_dater" else "asset_id"
-        return [{**r, "origine": (r.pop("source") or "tag:").split(":", 1)[0]} for r in self.base.tous(
-            f"SELECT asset_id, annee_proposee, marge, raison, source FROM scans "
+        # 2.3.0 : chemin (dossier + fichier) et noms des personnes sur la photo, pour filtrer la liste
+        noms: dict[str, list[str]] = {}
+        for v in self.base.tous("SELECT asset_id, person_nom FROM visages WHERE person_nom IS NOT NULL AND person_nom <> ''"):
+            noms.setdefault(v["asset_id"], []).append(v["person_nom"])
+        return [{**r, "origine": (r.pop("source") or "tag:").split(":", 1)[0], "noms": sorted(set(noms.get(r["asset_id"], [])))}
+                for r in self.base.tous(
+            f"SELECT asset_id, annee_proposee, marge, raison, source, chemin FROM scans "
             f"WHERE type='non_datee' AND statut=? ORDER BY {ordre}", statut)]
 
     def scan(self, asset_id: str) -> dict:
@@ -688,6 +697,8 @@ class Millesime:
             return {"ok": True}
         if j["action"] == "fusionner":
             return self._annuler_fusion(j, avant, apres)
+        if j["action"] == "detacher":
+            return self._annuler_detacher(j, avant)
         if j["action"] == "valider":
             if avant.get("date"):
                 self.immich.changer_date(aid, avant["date"])
@@ -806,6 +817,38 @@ class Millesime:
         self.suggestions_cache = None
         est.recalculer_propositions(self.base, self.cfg.seuil_doute)
         return {"ok": True, "journal": jid, "visages": len(faces), "cible": cible["nom"]}
+
+    def detacher_visage(self, asset_id: str, face_id: str) -> dict:
+        """2.3.0 : « ce visage n'est pas cette personne ». Immich ne sait pas laisser un visage sans personne :
+        il passe dans une personne neuve, sans nom (un groupe à nommer). Noté au journal, annulable."""
+        v = self.base.un("SELECT * FROM visages WHERE face_id=? AND asset_id=?", face_id, asset_id)
+        if not v or not v["person_id"] or not v["person_nom"]:
+            raise ErreurMillesime("Ce visage n'est rattaché à aucune personne nommée sur cette photo.")
+        avant = {"face_id": face_id, "person_id": v["person_id"], "nom": v["person_nom"] or "", "naissance": v["naissance"]}
+        jid = self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
+                                 asset_id, "detacher", json.dumps(avant), json.dumps({}), maintenant())
+        try:
+            nouvelle = self.immich.creer_personne("")
+            self.immich.reassigner_visage(face_id, nouvelle["id"])
+        except ErreurImmich as e:
+            raise ErreurMillesime(f"Immich a refusé : {e}. Voir le journal.") from e
+        self.base.executer("UPDATE journal SET apres=? WHERE id=?", json.dumps({"person_id": nouvelle["id"]}), jid)
+        self.base.executer("UPDATE visages SET person_id=?, person_nom=NULL, naissance=NULL, person_masque=0 WHERE face_id=?",
+                           nouvelle["id"], face_id)
+        self.base.executer("DELETE FROM frises WHERE person_id=?", v["person_id"])
+        self.suggestions_cache = None
+        est.recalculer_propositions(self.base, self.cfg.seuil_doute)
+        return {"ok": True, "journal": jid, "nom": avant["nom"]}
+
+    def _annuler_detacher(self, j: dict, avant: dict) -> dict:
+        self.immich.reassigner_visage(avant["face_id"], avant["person_id"])
+        self.base.executer("UPDATE visages SET person_id=?, person_nom=?, naissance=? WHERE face_id=?",
+                           avant["person_id"], avant.get("nom") or None, avant.get("naissance"), avant["face_id"])
+        self.base.executer("DELETE FROM frises WHERE person_id=?", avant["person_id"])
+        self.base.executer("UPDATE journal SET annule_le=? WHERE id=?", maintenant(), j["id"])
+        self.suggestions_cache = None
+        est.recalculer_propositions(self.base, self.cfg.seuil_doute)
+        return {"ok": True}
 
     def _annuler_fusion(self, j: dict, avant: dict, apres: dict) -> dict:
         """Recrée une personne et lui rend les visages notés avant la fusion."""

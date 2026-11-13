@@ -1,2 +1,2 @@
 """Millésime — datation des scans de photos papier dans Immich."""
-__version__ = "2.2.1"
+__version__ = "2.3.0"

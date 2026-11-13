@@ -40,7 +40,8 @@ def construire():
             if p and p.get("birthDate"):
                 verite[fid] = (d_vraie - date.fromisoformat(p["birthDate"])).days / 365.25
         assets[aid] = {"id": aid, "type": "IMAGE", "createdAt": envoi, "localDateTime": date_immich,
-                       "exifInfo": {"dateTimeOriginal": date_immich}, "tags": [], "faces": faces}
+                       "exifInfo": {"dateTimeOriginal": date_immich}, "tags": [], "faces": faces,
+                       "originalPath": f"/photos/Scans/Lot {'A' if aid[-1] in '024' else 'B'}/{aid}.jpg"}
         if tag_id:
             tag_assets.setdefault(tag_id, set()).add(aid)
             assets[aid]["tags"].append(tags[tag_id])

@@ -1,5 +1,12 @@
 # Journal des versions
 
+
+## 2.3.0 — 13/11/2026
+
+- **Filtrer « Dater »** par dossier — la liste montre l'arbre des dossiers, et un dossier parent garde tout ce qu'il contient, avec le nombre de photos — et/ou par nom : le fichier, le dossier ou une personne sur la photo. Le chemin de la photo s'affiche au-dessus. Les chemins arrivent à la synchronisation suivante (chaque heure, ou « Synchroniser »).
+- **« Ce n'est pas cette personne »** sur chaque visage reconnu d'une photo à dater : le visage est retiré de la personne dans Immich (il passe dans un groupe neuf, sans nom, à nommer), l'estimation est refaite sans lui. Noté au journal, annulable.
+- Tests : 25 du serveur, 16 d'écran.
+
 ## 2.2.1 — 13 novembre 2026
 - **Toujours sombre.** Le thème clair est retiré : l'appli est sombre partout, ouverte seule comme dans l'Anneau, quel que soit le réglage du téléphone.
 
