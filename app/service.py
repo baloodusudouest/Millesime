@@ -27,29 +27,73 @@ def maintenant() -> str:
 _DATE_DANS_NOM = re.compile(r"(?<!\d)((?:19|20)\d{2})[-_. ]?(0[1-9]|1[0-2])[-_. ]?(0[1-9]|[12]\d|3[01])(?!\d)")
 
 
-# 2.4.0 : une date écrite dans le chemin des dossiers : …/1983/01/…, …/1983-01/…, …/1983/… (pas le nom du fichier)
-_ANNEE = re.compile(r"^(19\d{2}|20\d{2})(?:[-_. ](0[1-9]|1[0-2]))?(?:\b|$)")
+# 2.4.0-2.5.0 : une date lue dans un nom de dossier, de sous-dossier ou d'album (jamais le nom du fichier) :
+#   …/1983/01/…, …/1983-07 Vacances/…, « Noël 1992 chez mamie », « juillet 1985 », « 1989-1992 ».
+_MOIS_NOMS = {"janv": 1, "janvier": 1, "fev": 2, "fevr": 2, "fevrier": 2, "mars": 3, "avr": 4, "avril": 4, "mai": 5,
+              "juin": 6, "juil": 7, "juillet": 7, "aout": 8, "sept": 9, "septembre": 9, "oct": 10, "octobre": 10,
+              "nov": 11, "novembre": 11, "dec": 12, "decembre": 12}
+_MOIS_ANNEE = re.compile(r"\b(" + "|".join(sorted(_MOIS_NOMS, key=len, reverse=True)) + r")\.?\s+(1[89]\d{2}|20\d{2})\b")
+_ANNEE_MOIS = re.compile(r"^(1[89]\d{2}|20\d{2})[-_. ](0[1-9]|1[0-2])(?:\b|$)")
+_ANNEE = re.compile(r"(?<!\d)(1[89]\d{2}|20\d{2})(?!\d)")
 _MOIS = re.compile(r"^(0[1-9]|1[0-2])(?:\b|$)")
+ECART_MAX = 20                                       # « 1923-2023 » ne dit rien d'une photo
+# un nom de lot dit quand la photo a été numérisée, importée ou sauvegardée, pas quand elle a été prise
+_LOT = re.compile(r"\b(numeris\w*|scans?|scanne\w*|import\w*|sauvegardes?|backups?|exports?|telecharg\w*)\b")
+
+
+def _sans_accents(t: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", t.lower()) if unicodedata.category(c) != "Mn")
+
+
+def date_d_un_nom(nom: str, suivant: str = "") -> str | None:
+    """« AAAA-MM », « AAAA » ou « AAAA/AAAA » (une fourchette) lue dans un nom ; `suivant` : le sous-dossier
+    qui suit, pour « …/1983/01/… ». None si le nom ne dit pas de date."""
+    n = _sans_accents(nom.strip())
+    if _LOT.search(n):
+        return None                                  # « Numérisations 2010 » : l'année du scan, pas de la photo
+    maintenant_ = datetime.now().year
+    m = _MOIS_ANNEE.search(n)
+    if m and int(m.group(2)) <= maintenant_:
+        return f"{m.group(2)}-{_MOIS_NOMS[m.group(1)]:02d}"
+    m = _ANNEE_MOIS.match(n)
+    if m and int(m.group(1)) <= maintenant_:
+        return f"{m.group(1)}-{m.group(2)}"
+    annees = sorted({int(a) for a in _ANNEE.findall(n) if 1850 <= int(a) <= maintenant_})
+    if not annees or annees[-1] - annees[0] > ECART_MAX:
+        return None
+    if len(annees) == 1:
+        mois = _MOIS.match(suivant.strip()) if re.fullmatch(r"\d{4}", n) and suivant else None
+        return f"{annees[0]}-{mois.group(1)}" if mois else str(annees[0])
+    return f"{annees[0]}/{annees[-1]}"
 
 
 def date_du_dossier(chemin: str | None) -> str | None:
-    """« AAAA-MM » ou « AAAA » lue dans les dossiers du chemin (le plus profond qui en porte une) ; sinon None."""
+    """La date du dossier le plus profond du chemin qui en porte une (le nom du fichier ne compte pas)."""
     morceaux = (chemin or "").replace("\\", "/").split("/")[:-1]
     trouvee = None
     for i, m in enumerate(morceaux):
-        a = _ANNEE.match(m.strip())
-        if not a or int(a.group(1)) > datetime.now().year:
-            continue
-        mois = a.group(2)
-        if not mois and i + 1 < len(morceaux) and _MOIS.match(morceaux[i + 1].strip()):
-            mois = _MOIS.match(morceaux[i + 1].strip()).group(1)
-        trouvee = f"{a.group(1)}-{mois}" if mois else a.group(1)
+        d = date_d_un_nom(m, morceaux[i + 1] if i + 1 < len(morceaux) else "")
+        if d:
+            trouvee = d
     return trouvee
 
 
+def bornes(d: str) -> tuple[int, int]:
+    """Les années couvertes par une date de nom : (1985, 1985) ou (1989, 1992)."""
+    if "/" in d:
+        a, b = d.split("/")
+        return int(a), int(b)
+    return int(d[:4]), int(d[:4])
+
+
 def jour_du_dossier(d: str) -> str:
-    """La date écrite pour une date de dossier : le 15 du mois, ou le 1er juillet pour une année seule."""
-    return f"{d}-15" if len(d) == 7 else f"{d}-07-01"
+    """La date écrite : le 15 du mois, le 1er juillet pour une année seule, le 1er juillet de l'année du milieu
+    pour une fourchette."""
+    if len(d) == 7 and "/" not in d:
+        return f"{d}-15"
+    a, b = bornes(d)
+    return f"{(a + b) // 2}-07-01"
 
 
 def dates_connues(a: dict, deja_estime: bool = False) -> tuple[str | None, str | None]:
@@ -161,11 +205,15 @@ class Millesime:
                 if r["asset_id"] not in vus:
                     self.base.executer("DELETE FROM visages WHERE asset_id=?", r["asset_id"])
                     self.base.executer("DELETE FROM scans WHERE asset_id=?", r["asset_id"])
-            # 2.4.0 : la date écrite dans le chemin des dossiers
-            for r in self.base.tous("SELECT asset_id, chemin, date_dossier FROM scans WHERE chemin IS NOT NULL"):
-                d = date_du_dossier(r["chemin"])
-                if d != r["date_dossier"]:
-                    self.base.executer("UPDATE scans SET date_dossier=? WHERE asset_id=?", d, r["asset_id"])
+            # 2.4.0 : la date écrite dans le chemin des dossiers ; 2.5.0 : à défaut, dans le titre d'un album
+            par_album = self._dates_des_albums()
+            for r in self.base.tous("SELECT asset_id, chemin, date_dossier, date_nom_source FROM scans"):
+                d, src = date_du_dossier(r["chemin"]), "dossier"
+                if not d and r["asset_id"] in par_album:
+                    d, src = par_album[r["asset_id"]]
+                src = src if d else None
+                if (d, src) != (r["date_dossier"], r["date_nom_source"]):
+                    self.base.executer("UPDATE scans SET date_dossier=?, date_nom_source=? WHERE asset_id=?", d, src, r["asset_id"])
             # 2.4.0 : synchro légère. Les visages ne sont relus que pour une photo changée dans Immich, jamais lue,
             # ou dont c'est le tour (chaque photo une fois par jour, réparties sur les 24 heures) ; `complete` : toutes.
             # Les noms, dates de naissance et masquages viennent d'une seule lecture des personnes.
@@ -204,6 +252,30 @@ class Millesime:
                                "VALUES(?,?,?,?,?,?,?,?)", asset_id, type_, date_tampon, lot, annee_envoi,
                                "validee" if deja_estime else ("a_analyser" if type_ == "non_datee" else "datee"), source,
                                chemin)
+
+    def _dates_des_albums(self) -> dict[str, tuple[str, str]]:
+        """2.5.0 : les photos des albums dont le titre porte une date (« Vacances 1985 », « juillet 1992 »).
+        Une photo dans plusieurs albums datés prend la date la plus précise."""
+        res: dict[str, tuple[str, str]] = {}
+        try:
+            albums = self.immich.albums()
+        except ErreurImmich as e:
+            log.warning("Albums illisibles : %s", e)
+            return res
+        precision = lambda d: (len(d) == 7 and "/" not in d, -(bornes(d)[1] - bornes(d)[0]))
+        for al in albums:
+            d = date_d_un_nom(al.get("albumName") or "")
+            if not d:
+                continue
+            try:
+                photos = self.immich.photos_album(al["id"])
+            except ErreurImmich:
+                continue
+            for a in photos:
+                avant = res.get(a["id"])
+                if not avant or precision(d) > precision(avant[0]):
+                    res[a["id"]] = (d, f"album:{al.get('albumName', '').strip()}")
+        return res
 
     def _rafraichir_personnes(self) -> int:
         """2.4.0 : noms, dates de naissance et masquage des personnes des visages connus, en une lecture."""
@@ -416,11 +488,50 @@ class Millesime:
                               "plusieurs": c.get("plusieurs", 0), "total": sum(c.values()),
                               "a_nommer": len(self.groupes_a_nommer()),
                               "sans_naissance": len(self.sans_naissance()),
-                              "suspects": len(est.suspects(self.base, self.cfg.seuil_suspect))},
+                              "suspects": len(est.suspects(self.base, self.cfg.seuil_suspect)),
+                              "datables": len(self.datables())},
                 "taches": self.compter_taches(), "calibrage": cal,
                 "derniere_synchro": self.base.lire("derniere_synchro"),
                 "pc": self.etat_pc(),
                 "dernier_calcul": self.base.lire("dernier_calcul")}
+
+    def datables(self) -> list[dict]:
+        """2.5.0 : les photos qu'un nom de dossier, de sous-dossier ou d'album date : sans visage pour dater, ou dont
+        les visages disent la même chose que le nom. Celles où les visages le contredisent n'y sont pas."""
+        res = []
+        for r in self.base.tous("SELECT * FROM scans WHERE type='non_datee' AND statut IN ('a_dater', 'a_trancher') "
+                                "AND date_dossier IS NOT NULL ORDER BY asset_id"):
+            c = self._comparer(r)
+            if (r.get("raison") or "").startswith("date lue dans") or (c and c["coherent"]):
+                res.append(r)
+        return res
+
+    def dater_par_nom(self, lot: str, n: int = 100) -> dict:
+        """2.5.0 : « Tout dater d'un coup » par lots de `n` : chaque photo prend la date de son nom (écrite dans Immich,
+        notée au journal avec le numéro du lot, pour tout annuler d'un geste)."""
+        faites, erreurs = 0, []
+        for r in self.datables()[:n]:
+            try:
+                self.garder_date(r["asset_id"], "dossier", lot=lot)
+                faites += 1
+            except ErreurMillesime as e:
+                erreurs.append(str(e))
+                if len(erreurs) >= 3:
+                    break
+        return {"lot": lot, "faites": faites, "restant": len(self.datables()), "erreurs": erreurs[:3]}
+
+    def annuler_lot(self, lot: str) -> dict:
+        """Annule toutes les écritures d'un lot, de la plus récente à la plus ancienne."""
+        ids = [j["id"] for j in self.base.tous("SELECT id, apres FROM journal WHERE annule_le IS NULL ORDER BY id DESC")
+               if json.loads(j["apres"] or "{}").get("lot") == lot]
+        faites, erreurs = 0, []
+        for jid in ids:
+            try:
+                self.annuler(jid)
+                faites += 1
+            except (ErreurMillesime, ErreurImmich) as e:
+                erreurs.append(str(e))
+        return {"annulees": faites, "erreurs": erreurs[:3]}
 
     def liste(self, statut: str) -> list[dict]:
         ordre = "marge ASC, asset_id" if statut == "a_dater" else "asset_id"
@@ -428,10 +539,13 @@ class Millesime:
         noms: dict[str, list[str]] = {}
         for v in self.base.tous("SELECT asset_id, person_nom FROM visages WHERE person_nom IS NOT NULL AND person_nom <> ''"):
             noms.setdefault(v["asset_id"], []).append(v["person_nom"])
+        if statut == "datables":
+            lignes = [{k: r[k] for k in ("asset_id", "annee_proposee", "marge", "raison", "source", "chemin")} for r in self.datables()]
+        else:
+            lignes = self.base.tous(f"SELECT asset_id, annee_proposee, marge, raison, source, chemin FROM scans "
+                                    f"WHERE type='non_datee' AND statut=? ORDER BY {ordre}", statut)
         return [{**r, "origine": (r.pop("source") or "tag:").split(":", 1)[0], "noms": sorted(set(noms.get(r["asset_id"], [])))}
-                for r in self.base.tous(
-            f"SELECT asset_id, annee_proposee, marge, raison, source, chemin FROM scans "
-            f"WHERE type='non_datee' AND statut=? ORDER BY {ordre}", statut)]
+                for r in lignes]
 
     def scan(self, asset_id: str) -> dict:
         s = self.base.un("SELECT * FROM scans WHERE asset_id=?", asset_id)
@@ -489,11 +603,13 @@ class Millesime:
         if not connue and not du_nom and not dossier:
             return None
         estimee, marge = s.get("annee_proposee"), s.get("marge") or 0
-        if (s.get("raison") or "").startswith("date lue dans le dossier"):
-            estimee = None                           # la proposition vient du dossier lui-même : rien à comparer
-        annees = {int(d[:4]) for d in (connue, du_nom, dossier) if d}
-        ecart = max(abs(a - estimee) for a in annees) if estimee is not None else None
-        entre_elles = len(annees) > 1
+        if (s.get("raison") or "").startswith("date lue dans"):
+            estimee = None                           # la proposition vient du nom lui-même : rien à comparer
+        # chaque date connue couvre une ou plusieurs années (une fourchette « 1989/1992 » lue dans un nom)
+        plages = [(int(d[:4]), int(d[:4])) for d in (connue, du_nom) if d] + ([bornes(dossier)] if dossier else [])
+        distance = lambda a, p: 0 if p[0] <= a <= p[1] else min(abs(a - p[0]), abs(a - p[1]))
+        ecart = max(distance(estimee, p) for p in plages) if estimee is not None else None
+        entre_elles = len(plages) > 1 and max(p[0] for p in plages) > min(p[1] for p in plages)
         if estimee is None:
             coherent, phrase = (None if not entre_elles else False,
                                 "Les dates connues ne disent pas la même année." if entre_elles
@@ -505,11 +621,13 @@ class Millesime:
                       if ecart > marge + 1 else "Les dates connues ne disent pas la même année.")
         else:
             coherent, phrase = True, f"Cohérent avec l'estimation ({estimee} ±{marge})."
+        source = s.get("date_nom_source") or ("dossier" if dossier else None)
         return {"date_connue": connue, "date_nom": du_nom if du_nom != connue else None, "date_dossier": dossier,
+                "date_dossier_source": ("l'album « " + source[6:] + " »") if source and source.startswith("album:") else "le dossier",
                 "annee_estimee": estimee,
                 "marge": marge if estimee is not None else None, "coherent": coherent, "phrase": phrase}
 
-    def garder_date(self, asset_id: str, laquelle: str) -> dict:
+    def garder_date(self, asset_id: str, laquelle: str, lot: str | None = None) -> dict:
         """La photo garde sa date d'Immich (rien n'est écrit), ou prend celle de son nom de fichier (une écriture,
         annulable). Dans les deux cas elle est comptée comme datée."""
         s = self.base.un("SELECT * FROM scans WHERE asset_id=? AND type='non_datee'", asset_id)
@@ -520,7 +638,7 @@ class Millesime:
         if not choisie:
             raise ErreurMillesime("Cette photo n'a pas cette date.")
         avant = {"statut": s["statut"]}
-        apres = {"origine": laquelle, "date_gardee": choisie}
+        apres = {"origine": laquelle, "date_gardee": choisie, **({"lot": lot} if lot else {})}
         ecrit = laquelle in ("nom", "dossier")
         if ecrit:
             a = self.immich.asset(asset_id)

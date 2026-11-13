@@ -197,11 +197,15 @@ def proposer(base: Base, scan: dict, version: int | None, p: dict, seuil_doute: 
         return {"statut": "a_analyser", "annee_proposee": None, "marge": None,
                 "raison": f"{len(en_attente)} visage(s) en attente du calcul sur le PC", "details": details}
     if not annees and scan.get("date_dossier"):
-        # 2.4.0 : pas de visage pour dater, mais le dossier porte une date (…/1983/01) : elle est proposée
+        # 2.4.0-2.5.0 : pas de visage pour dater, mais un dossier ou un album porte une date (…/1983/01, « Noël 1992 »,
+        # « 1989-1992 ») : elle est proposée ; une fourchette donne l'année du milieu, avec sa marge
         d = scan["date_dossier"]
+        a, b = (int(x) for x in d.split("/")) if "/" in d else (int(d[:4]), int(d[:4]))
+        src = scan.get("date_nom_source") or "dossier"
+        ou = f"l'album « {src[6:]} »" if src.startswith("album:") else "le dossier"
         details["dossier"] = d
-        return {"statut": "a_dater", "annee_proposee": int(d[:4]), "marge": 0,
-                "raison": f"date lue dans le dossier ({d}), aucun visage pour la vérifier", "details": details}
+        return {"statut": "a_dater", "annee_proposee": (a + b) // 2, "marge": (b - a + 1) // 2,
+                "raison": f"date lue dans {ou} ({d.replace('/', '-')}), aucun visage pour la vérifier", "details": details}
     if not annees:
         return {"statut": "a_trancher", "annee_proposee": None, "marge": None,
                 "raison": "aucun visage nommé avec une date de naissance", "details": details}

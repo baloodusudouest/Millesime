@@ -2,6 +2,14 @@
 
 
 
+
+## 2.5.0 — 13/11/2026
+
+- **Tuile « Datables par le nom »** dans À traiter : les photos qu'un nom de dossier, de sous-dossier ou un titre d'album date, sans visage pour les dater ou avec des visages qui disent la même chose. Celles dont les visages contredisent le nom n'y sont pas.
+- **Ce qui se lit dans un nom** : une année à 4 chiffres n'importe où (« Noël 1992 chez mamie »), un mois en toutes lettres (« juillet 1985 », « déc. 1992 »), « 1983-07 », « …/1983/01/… », et une fourchette (« 1989-1992 ») proposée comme une estimation (année du milieu, avec sa marge). Le titre d'un album sert quand le dossier ne dit rien. Un nom de lot (« Numérisations 2010 », « 1998 Numérisation … », import, sauvegarde) est ignoré : c'est l'année du scan, pas de la photo.
+- **« Tout dater d'un coup »** sur cette file : par lots de 100, chaque photo prend la date de son nom (le 15 du mois, le 1er juillet pour une année, l'année du milieu pour une fourchette), notée au journal avec le numéro du lot ; « Annuler tout ce lot » défait tout d'un geste.
+- Tests : 31 du serveur, 18 d'écran.
+
 ## 2.4.0 — 13/11/2026
 
 - **La date du dossier.** Un chemin comme « …/Date/1983/01/… », « …/1983-07 Vacances/… » ou « …/1983/… » donne une date. Une photo sans visage utile dont le dossier porte une date passe de « à trancher » à « à dater », avec cette année proposée (marge 0) ; « Prendre celle du dossier » l'écrit dans Immich (le 15 du mois, ou le 1er juillet pour une année seule), annulable. Quand il y a des visages, la date du dossier est comparée à l'estimation comme celles d'Immich et du nom du fichier. Vu le 13/11 : 3 955 photos « à trancher » faute de visage, venues de dossiers datés.

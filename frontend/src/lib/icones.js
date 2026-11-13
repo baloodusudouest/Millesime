@@ -5,6 +5,7 @@ export const ICONES = {
   connexion: '<circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="6" r="1.8"/><circle cx="19" cy="6" r="1.8"/><circle cx="5" cy="18" r="1.8"/><circle cx="19" cy="18" r="1.8"/><path d="m6.4 7.2 3.6 3M17.6 7.2l-3.6 3M6.4 16.8l3.6-3M17.6 16.8l-3.6-3"/>',
   reglages: '<path d="M5 7.5h6M15 7.5h4M5 16.5h3M12 16.5h7"/><circle cx="13" cy="7.5" r="2"/><circle cx="10" cy="16.5" r="2"/>',
   // tuiles d'« À traiter »
+  datables: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M8 13h3M8 16h6"/>',
   trancher: '<path d="M12 4v16M5 8l7-4 7 4"/><path d="M5 8 2.8 13a2.6 2.6 0 0 0 4.4 0zM19 8l-2.2 5a2.6 2.6 0 0 0 4.4 0z"/>',
   nommer: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15.5 6.5h5M15.5 10.5h5M17.5 14.5h3"/>',
   verifier: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4.6-4.6M11 8.5v3.2M11 13.9v.1"/>',

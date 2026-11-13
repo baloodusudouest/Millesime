@@ -8,6 +8,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from datetime import datetime
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -147,9 +148,23 @@ def synchroniser():
     return m().synchroniser(complete=True)
 
 
+@app.post("/api/datables/dater")
+def dater_datables(corps: dict = Body(default={})):
+    """2.5.0 : un lot de « Tout dater d'un coup » (l'écran rappelle jusqu'à ce qu'il n'en reste plus)."""
+    ecriture()
+    lot = str(corps.get("lot") or "")[:40] or datetime.now().strftime("nom-%Y%m%d-%H%M%S")
+    return m().dater_par_nom(lot, min(max(int(corps.get("n") or 100), 1), 200))
+
+
+@app.post("/api/lots/{lot}/annuler")
+def annuler_lot(lot: str):
+    ecriture()
+    return m().annuler_lot(lot)
+
+
 @app.get("/api/scans")
 def scans(statut: str = "a_dater"):
-    if statut not in ("a_dater", "a_trancher", "a_analyser", "validee", "plusieurs"):
+    if statut not in ("a_dater", "a_trancher", "a_analyser", "validee", "plusieurs", "datables"):
         raise HTTPException(400, "Statut inconnu.")
     return m().liste(statut)
 

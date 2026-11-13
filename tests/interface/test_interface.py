@@ -109,7 +109,7 @@ def test_20_a_traiter_en_tuiles(page):
     tuiles = page.locator("nav[aria-label='Files à traiter'] .tuile")
     tuiles.first.wait_for()
     noms = tuiles.locator(".nom-tuile").all_inner_texts()
-    assert noms[:5] == ["À dater", "À trancher", "À nommer", "À vérifier", "Sans naissance"]
+    assert noms[:5] == ["À dater", "Datables par le nom", "À trancher", "À nommer", "À vérifier"]
     assert page.get_by_label(re.compile(r"photos datées sur")).count() == 1            # le bilan reste en tête
     tuiles.filter(has_text="À nommer").click()
     page.get_by_role("heading", name="Nommer").wait_for()
@@ -205,4 +205,14 @@ def test_230_filtres_et_ce_n_est_pas_cette_personne(page):
         bouton = reconnus.get_by_role("button", name="Ce n'est pas cette personne").first
         bouton.click()
         reconnus.get_by_role("button", name=re.compile("Confirmer : ce n'est pas")).wait_for()   # un second appui confirme
+    assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
+
+
+def test_250_tuile_datables_par_le_nom(page):
+    page.goto(page.url.split("#")[0] + "#a-traiter")
+    tuile = page.locator("a.tuile[href='#datables']")
+    tuile.wait_for()
+    assert "Datables par le nom" in tuile.inner_text()
+    tuile.click()
+    page.get_by_text(re.compile("Plus rien à dater par le nom|Datables par le nom")).first.wait_for()
     assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
