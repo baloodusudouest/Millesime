@@ -5,6 +5,9 @@
 
 
 
+
+## 2.7.1 — 14 novembre 2026
+- **Datables par le nom : la liste de gauche est de nouveau lisible.** Depuis la 2.7.0, la case à cocher de chaque dossier prenait toute la largeur de la ligne (elle recevait le style du champ de recherche) : on ne voyait que de grandes cases vides, sans le nom des dossiers. La case reprend sa taille ; un test d'écran vérifie la largeur de la case et du nom.
 ## 2.7.0 — 14/11/2026
 
 - **Plusieurs dossiers ou albums d'un coup** dans « Datables par le nom » : une case devant chaque dossier ou album. Les cochés s'affichent en tableau, avec leur nombre de photos, la date lue dans leur nom — modifiable (1992, 07/1992 ou 14/07/1992) — et la date qui sera écrite. Un bouton date toutes leurs photos, chacun à sa date ; une date illisible bloque le bouton. Annulable d'un geste. Sur iPhone, le tableau des cochés passe au-dessus de la liste.
