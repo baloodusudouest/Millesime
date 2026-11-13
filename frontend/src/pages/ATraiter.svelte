@@ -10,6 +10,7 @@
   const attente = $derived(a ? a.taches.calibrage + a.taches.a_dater : 0)
   const tuiles = $derived(a ? [
     { cle: 'dater', lien: '#dater', n: a.compteurs.a_dater, nom: 'À dater', resume: 'Une année proposée, à valider' },
+    { cle: 'datables', lien: '#datables', n: a.compteurs.datables, nom: 'Datables par le nom', resume: 'Dossier, sous-dossier ou album qui porte une date' },
     { cle: 'trancher', lien: '#trancher', n: a.compteurs.a_trancher, nom: 'À trancher', resume: 'Marge large ou visages en désaccord' },
     { cle: 'nommer', lien: '#nommer', n: a.compteurs.a_nommer, nom: 'À nommer', resume: 'Groupes de visages sans nom' },
     { cle: 'verifier', lien: '#verifier', n: a.compteurs.suspects, nom: 'À vérifier', resume: 'Âge estimé qui contredit l\'âge connu' },

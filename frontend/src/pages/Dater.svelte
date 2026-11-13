@@ -111,6 +111,47 @@
   }
   // retire de la liste la photo traitée (la liste filtrée suit)
   function retirer() { const id = liste[position]?.asset_id; tous = tous.filter((x) => x.asset_id !== id) }
+  // 2.5.0 : « Tout dater d'un coup » pour les photos datables par le nom, par lots de 100, annulable d'un geste
+  let lot = $state('')
+  let enLot = $state(false)
+  let confirmeLot = $state(false)
+  let confirmeAnnuler = $state(false)
+  let faitesLot = $state(0)
+  let restantLot = $state(0)
+  async function toutDater() {
+    if (!confirmeLot) { confirmeLot = true; return }
+    confirmeLot = false
+    enLot = true
+    erreur = ''
+    faitesLot = 0
+    lot = ''
+    try {
+      while (true) {
+        const r = await api.post('/api/datables/dater', { lot: lot || undefined, n: 100 })
+        lot = r.lot
+        faitesLot += r.faites
+        restantLot = r.restant
+        if (r.erreurs.length) { erreur = r.erreurs[0]; break }
+        if (!r.faites || !r.restant) break
+      }
+    } catch (e) { erreur = e.message }
+    enLot = false
+    await chargerListe()
+  }
+  async function annulerLot() {
+    if (!confirmeAnnuler) { confirmeAnnuler = true; return }
+    confirmeAnnuler = false
+    occupe = true
+    try {
+      const r = await api.post(`/api/lots/${encodeURIComponent(lot)}/annuler`)
+      message = { texte: `${r.annulees} datation${r.annulees > 1 ? 's' : ''} annulée${r.annulees > 1 ? 's' : ''}.` }
+      if (r.erreurs.length) erreur = r.erreurs[0]
+      lot = ''
+      faitesLot = 0
+      await chargerListe()
+    } catch (e) { erreur = e.message }
+    occupe = false
+  }
   // 2.3.0 : « ce n'est pas cette personne » — le visage est retiré de la personne dans Immich (annulable)
   let pasElle = $state(null)   // face_id en attente de confirmation
   async function detacher(v) {
@@ -166,6 +207,20 @@
 {/if}
 {#if erreur}<p class="mb-4 text-alerte" role="alert">{erreur}</p>{/if}
 
+{#if statut === 'datables' && (tous.length || lot)}
+  <section class="surface mb-4 p-4" aria-label="Tout dater d'un coup">
+    {#if enLot}
+      <p class="text-sm" role="status">Datation en cours : {faitesLot} photo{faitesLot > 1 ? 's' : ''} datée{faitesLot > 1 ? 's' : ''}, {restantLot} restante{restantLot > 1 ? 's' : ''}…</p>
+    {:else if lot}
+      <p class="text-sm" role="status">{faitesLot} photo{faitesLot > 1 ? 's' : ''} datée{faitesLot > 1 ? 's' : ''} d'après leur nom (lot {lot}).</p>
+      <button class="bouton mt-2" onclick={annulerLot} disabled={occupe}>{confirmeAnnuler ? `Confirmer : annuler les ${faitesLot}` : 'Annuler tout ce lot'}</button>
+    {:else}
+      <p class="text-sm">Chaque photo prend la date de son dossier ou de son album (le 15 du mois, le 1er juillet pour une année, l'année du milieu pour une fourchette). Celles dont les visages contredisent le nom ne sont pas dans cette liste. Tout est noté au journal et s'annule d'un geste.</p>
+      <button class="bouton bouton-confirmer mt-2" onclick={toutDater} disabled={occupe || session.lecture_seule}>{confirmeLot ? `Confirmer : dater les ${tous.length} photos` : `Tout dater d'un coup (${tous.length})`}</button>
+    {/if}
+  </section>
+{/if}
+
 {#if tous.length}
   <div class="filtres mb-4" role="search" aria-label="Filtrer les photos">
     <label class="sr-only" for="filtre-dossier">Dossier</label>
@@ -180,10 +235,10 @@
 {/if}
 
 {#if !s && liste.length === 0 && (dossier || cherche)}
-  <p class="secondaire py-10 text-center">Aucune photo {statut === 'a_dater' ? 'à dater' : 'à trancher'} avec ce filtre.</p>
+  <p class="secondaire py-10 text-center">Aucune photo {statut === 'a_dater' ? 'à dater' : statut === 'datables' ? 'datable par le nom' : 'à trancher'} avec ce filtre.</p>
 {:else if !s && liste.length === 0}
   <div class="py-16 text-center">
-    <p class="titre-page">{statut === 'a_dater' ? 'Tout est daté' : 'Rien à trancher'}</p>
+    <p class="titre-page">{statut === 'a_dater' ? 'Tout est daté' : statut === 'datables' ? 'Plus rien à dater par le nom' : 'Rien à trancher'}</p>
     <p class="secondaire mx-auto mt-3 max-w-md">
       {#if statut === 'a_dater'}Les photos restantes attendent le calcul sur le PC, ou sont à trancher.
       {:else}Les cas douteux apparaîtront ici : marge trop large, visages en désaccord, aucun visage exploitable.{/if}
@@ -194,7 +249,7 @@
     </p>
   </div>
 {:else if s}
-  <p class="secondaire mb-3 text-sm">{statut === 'a_dater' ? 'À dater' : 'À trancher'} : photo {position + 1} sur {liste.length}{liste.length < tous.length ? ` (filtre : ${tous.length} en tout)` : ''}
+  <p class="secondaire mb-3 text-sm">{statut === 'a_dater' ? 'À dater' : statut === 'datables' ? 'Datables par le nom' : 'À trancher'} : photo {position + 1} sur {liste.length}{liste.length < tous.length ? ` (filtre : ${tous.length} en tout)` : ''}
     {#if liste[position]?.chemin}<span class="chemin" title={liste[position].chemin}> · {liste[position].chemin.split('/').slice(-2).join('/')}</span>{/if}</p>
 
   <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -223,7 +278,7 @@
           <dl class="grid gap-1">
             {#if c.date_connue}<div class="flex justify-between gap-3"><dt class="secondaire">Date dans Immich</dt><dd>{dateJour(c.date_connue)}</dd></div>{/if}
             {#if c.date_nom}<div class="flex justify-between gap-3"><dt class="secondaire">Dans le nom du fichier</dt><dd>{dateJour(c.date_nom)}</dd></div>{/if}
-            {#if c.date_dossier}<div class="flex justify-between gap-3"><dt class="secondaire">Dans le dossier</dt><dd>{c.date_dossier}</dd></div>{/if}
+            {#if c.date_dossier}<div class="flex justify-between gap-3"><dt class="secondaire">Dans {c.date_dossier_source}</dt><dd>{c.date_dossier}</dd></div>{/if}
             {#if c.annee_estimee !== null}<div class="flex justify-between gap-3"><dt class="secondaire">Estimée par Millésime</dt><dd>{c.annee_estimee} ±{c.marge}</dd></div>{/if}
           </dl>
           <p class="mt-2 font-semibold {c.coherent === false ? 'text-alerte' : c.coherent ? 'text-or' : ''}">{c.phrase}</p>
@@ -231,7 +286,7 @@
           <div class="mt-2 grid gap-2">
             {#if c.date_connue}<button class="bouton" onclick={() => garder('actuelle')} disabled={occupe}>Garder la date d'Immich ({c.date_connue.slice(0, 4)})</button>{/if}
             {#if c.date_nom}<button class="bouton" onclick={() => garder('nom')} disabled={occupe || session.lecture_seule}>Prendre celle du nom du fichier ({c.date_nom.slice(0, 4)})</button>{/if}
-            {#if c.date_dossier}<button class="bouton" onclick={() => garder('dossier')} disabled={occupe || session.lecture_seule}>Prendre celle du dossier ({c.date_dossier})</button>{/if}
+            {#if c.date_dossier}<button class="bouton" onclick={() => garder('dossier')} disabled={occupe || session.lecture_seule}>Prendre celle {c.date_dossier_source.startsWith('le dossier') ? 'du dossier' : 'de l\'album'} ({c.date_dossier.replace('/', '-')})</button>{/if}
           </div>
           <p class="secondaire mt-2 text-xs">Ou règle l'année ci-dessous et valide : c'est l'estimation qui sera écrite.</p>
         </div>

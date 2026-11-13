@@ -84,7 +84,8 @@ class Base:
                 self.cx.execute("ALTER TABLE scans ADD COLUMN source TEXT")      # 2.2.0 : NULL = scan tagué
             cols = {r[1] for r in self.cx.execute("PRAGMA table_info(scans)")}
             for col in ("date_connue", "date_nom", "chemin",                    # 2.2.0 : date déjà portée ; 2.3.0 : chemin
-                        "date_dossier", "maj_immich", "visages_lus_le"):         # 2.4.0 : date du dossier, synchro légère
+                        "date_dossier", "maj_immich", "visages_lus_le",          # 2.4.0 : date du dossier, synchro légère
+                        "date_nom_source"):                                      # 2.5.0 : « dossier » ou « album:<nom> »
                 if col not in cols:
                     self.cx.execute(f"ALTER TABLE scans ADD COLUMN {col} TEXT")
 

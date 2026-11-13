@@ -750,3 +750,44 @@ def test_240_synchro_legere(env):
     b = main.ETAT["m"].synchroniser()                                                    # la synchro de chaque heure
     assert not b["complete"] and b["relues"] < 10
     assert client.get("/api/scans/nd0").json()["visages"][0]["person_nom"] == "Julien BERT"
+
+
+def test_250_dates_dans_les_noms_et_albums():
+    from app.service import date_d_un_nom, date_du_dossier, jour_du_dossier
+    assert date_d_un_nom("Noël 1992 chez mamie") == "1992" and date_d_un_nom("juillet 1985") == "1985-07"
+    assert date_d_un_nom("déc. 1992 neige") == "1992-12" and date_d_un_nom("Francine Philippe 1989-1992") == "1989/1992"
+    assert date_d_un_nom("Numérisations 2010") is None and date_d_un_nom("1998 Numérisation Yves") is None   # lots de scans
+    assert date_d_un_nom("1923 2023") is None and date_d_un_nom("Boite 156-184") is None and date_d_un_nom("85 86") is None
+    assert date_du_dossier("/p/Vacances 1985/Plage/a.jpg") == "1985"
+    assert jour_du_dossier("1989/1992") == "1990-07-01"
+
+
+def test_250_tuile_datables_lot_et_annulation(env):
+    """2.5.0 : un album ou un dossier daté rend la photo « datable » ; tout dater d'un coup par lots, et tout annuler."""
+    client, E = env
+    connecter(client)
+    E["assets"]["nd-sans"]["originalPath"] = "/photos/Noël 1992 chez mamie/nd-sans.jpg"
+    client.post("/api/synchroniser")
+    acc = client.get("/api/accueil").json()["compteurs"]
+    assert acc["datables"] >= 1
+    liste = client.get("/api/scans?statut=datables").json()
+    assert "nd-sans" in [x["asset_id"] for x in liste]
+    s = client.get("/api/scans/nd-sans").json()
+    assert s["annee_proposee"] == 1992 and s["comparaison"]["date_dossier_source"] == "le dossier"
+    r = client.post("/api/datables/dater", json={"n": 200}).json()
+    assert r["faites"] == len(liste) and r["restant"] == 0 and not r["erreurs"]
+    assert E["assets"]["nd-sans"]["exifInfo"]["dateTimeOriginal"] == "1992-07-01T12:00:00.000Z"
+    assert client.get("/api/scans/nd-sans").json()["statut"] == "validee"
+    a = client.post(f"/api/lots/{r['lot']}/annuler").json()
+    assert a["annulees"] == r["faites"] and not a["erreurs"]
+    assert client.get("/api/scans/nd-sans").json()["statut"] != "validee"
+
+
+def test_250_titre_d_album(env):
+    client, E = env
+    connecter(client)
+    E["albums"]["al-noel"] = {"id": "al-noel", "albumName": "Noël juillet 1987 au chalet", "assets": {"nd-sans"}}
+    client.post("/api/synchroniser")
+    s = client.get("/api/scans/nd-sans").json()
+    assert s["comparaison"]["date_dossier"] == "1987-07" and "Noël juillet 1987 au chalet" in s["comparaison"]["date_dossier_source"]
+    assert s["annee_proposee"] == 1987 and "l'album" in s["raison"]

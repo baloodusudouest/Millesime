@@ -21,7 +21,7 @@
   // Anciennes adresses (1.x) : elles mènent au nouvel écran qui a repris leur contenu
   const ANCIENNES = { accueil: 'a-traiter', calcul: 'connexion/pc', journal: 'reglages' }
   // Files ouvertes par une tuile : elles appartiennent à « À traiter »
-  const FILES = ['trancher', 'nommer', 'verifier']
+  const FILES = ['trancher', 'nommer', 'verifier', 'datables']
 
   // #page ou #page/paramètre (ex. #nommer/<id d'un groupe>, #connexion/pc)
   const lire = () => {
@@ -34,7 +34,7 @@
   const page = $derived(route.page)
   const actif = $derived(FILES.includes(page) ? 'a-traiter' : page)
   // Dans une file où l'on valide photo après photo, la pilule s'efface sur iPhone : « Valider » reste sous le pouce
-  const enFile = $derived(page === 'dater' || page === 'trancher')
+  const enFile = $derived(page === 'dater' || page === 'trancher' || page === 'datables')
   let compteurs = $state(null)
   async function compter() {
     try { compteurs = (await api.get('/api/accueil')).compteurs } catch {}
@@ -86,6 +86,7 @@
     {/if}
     {#if page === 'dater'}<Dater statut="a_dater" />
     {:else if page === 'trancher'}<Dater statut="a_trancher" />
+    {:else if page === 'datables'}<Dater statut="datables" />
     {:else if page === 'nommer'}<Nommer cible={route.param} />
     {:else if page === 'verifier'}<Verifier />
     {:else if page === 'connexion'}<Services service={route.param} />
