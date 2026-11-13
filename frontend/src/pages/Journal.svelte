@@ -15,6 +15,7 @@
     if (j.action === 'valider') return `Datée ${j.apres.tag?.split('/').pop() ?? ''}, album « ${j.apres.album} »`
     if (j.action === 'plusieurs') return 'Mise de côté : plusieurs années'
     if (j.action === 'nommer') return `Groupe de visages nommé « ${j.apres.nom} »`
+    if (j.action === 'detacher') return `Visage retiré de ${j.avant.nom || 'la personne'} (ce n'était pas elle)`
     if (j.action === 'fusionner') return `${j.avant.faces?.length ?? 0} visages rattachés à ${j.apres.cible_nom}`
     return j.action
   }

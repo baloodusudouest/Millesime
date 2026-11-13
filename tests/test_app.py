@@ -686,3 +686,27 @@ def test_220_demande_a_transhumance(env, monkeypatch):
     Reponse.json = lambda self: {"detail": "Dossier inconnu de Transhumance."}
     r = client.post("/api/sources/demander", json={"cle": cle})
     assert r.status_code == 400 and "Dossier inconnu" in r.json()["detail"]
+
+
+def test_filtres_dater_et_visage_detache(env):
+    """2.3.0 : chemin et noms dans la liste (filtres de « Dater ») ; « ce n'est pas cette personne », annulable."""
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    liste = client.get("/api/scans?statut=a_analyser").json()
+    nd0 = next(x for x in liste if x["asset_id"] == "nd0")
+    assert nd0["chemin"] == "/photos/Scans/Lot A/nd0.jpg" and nd0["noms"] == ["Alex DUVAL", "Julien B"]
+    assert {x["chemin"].split("/")[3] for x in liste if x["chemin"]} == {"Lot A", "Lot B"}
+    r = client.post("/api/scans/nd0/visages/nd0-f0/detacher").json()
+    assert r["ok"] and r["nom"] == "Julien B"
+    face = next(f for f in E["assets"]["nd0"]["faces"] if f["id"] == "nd0-f0")
+    nouvelle = (face["person"] or {}).get("id")
+    assert nouvelle and nouvelle != "julien" and not E["personnes"][nouvelle]["name"]
+    s = client.get("/api/scans/nd0").json()
+    assert next(v for v in s["visages"] if v["face_id"] == "nd0-f0")["person_nom"] in (None, "")
+    assert client.post("/api/scans/nd0/visages/nd0-f0/detacher").status_code == 400      # il n'est plus rattaché à une personne nommée
+    j = next(x for x in client.get("/api/journal").json() if x["action"] == "detacher")
+    assert client.post(f"/api/journal/{j['id']}/annuler").json()["ok"]
+    face = next(f for f in E["assets"]["nd0"]["faces"] if f["id"] == "nd0-f0")
+    assert face["person"]["id"] == "julien"
+    assert next(v for v in client.get("/api/scans/nd0").json()["visages"] if v["face_id"] == "nd0-f0")["person_nom"] == "Julien B"

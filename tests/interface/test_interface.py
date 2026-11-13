@@ -182,3 +182,27 @@ def test_220_une_date_deja_la_est_comparee(page):
     message.wait_for()
     message.get_by_role("button", name="Annuler").click()                                # le serveur est partagé : on remet
     assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
+
+
+def test_230_filtres_et_ce_n_est_pas_cette_personne(page):
+    """2.3.0 : filtrer « Dater » par dossier (et ses parents) ou par nom ; détacher un visage mal attribué."""
+    page.goto(page.url.split("#")[0] + "#dater")
+    page.locator("section[aria-label='Année']").wait_for()
+    choix = page.locator("#filtre-dossier option").all_inner_texts()
+    assert any("Lot A" in c for c in choix) and any("Scans" in c for c in choix)
+    total = int(re.search(r"sur (\d+)", page.get_by_text(re.compile(r"photo \d+ sur")).inner_text()).group(1))
+    page.select_option("#filtre-dossier", label=next(c for c in choix if "Lot A" in c))
+    filtre = page.get_by_text(re.compile(r"photo \d+ sur \d+ \(filtre"))
+    filtre.wait_for()
+    assert int(re.search(r"sur (\d+)", filtre.inner_text()).group(1)) < total
+    page.get_by_role("button", name="Tout voir").click()
+    page.fill("#filtre-nom", "zzz-personne")
+    page.get_by_text("Aucune photo").wait_for()
+    page.get_by_role("button", name="Tout voir").click()
+    page.locator("section[aria-label='Année']").wait_for()
+    reconnus = page.locator("section[aria-labelledby='titre-reconnus']")
+    if reconnus.count():
+        bouton = reconnus.get_by_role("button", name="Ce n'est pas cette personne").first
+        bouton.click()
+        reconnus.get_by_role("button", name=re.compile("Confirmer : ce n'est pas")).wait_for()   # un second appui confirme
+    assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0

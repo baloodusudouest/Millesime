@@ -1,12 +1,38 @@
 <script>
+  import { untrack } from 'svelte'
   import { api, apercu, dateJour, session, versImmich, visage } from '../lib/api.svelte.js'
   import Frise from '../components/Frise.svelte'
   import NommerGroupe from '../components/NommerGroupe.svelte'
   import Visionneuse from '../components/Visionneuse.svelte'
 
   let { statut } = $props()
-  let liste = $state([])
+  let tous = $state([])          // la liste lue ; « liste » est ce que les filtres en gardent
   let position = $state(0)
+  // 2.3.0 : filtres par dossier (un dossier parent garde ses sous-dossiers) et par nom (fichier, dossier, personnes)
+  let dossier = $state('')
+  let cherche = $state('')
+  const plat = (t) => (t || '').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
+  const dossierDe = (c) => (c || '').split('/').slice(0, -1).join('/')
+  const liste = $derived.by(() => {
+    const mot = plat(cherche.trim())
+    return tous.filter((x) => (!dossier || (dossierDe(x.chemin) + '/').startsWith(dossier + '/'))
+      && (!mot || plat(x.chemin).includes(mot) || x.noms.some((n) => plat(n).includes(mot))))
+  })
+  // L'arbre : chaque dossier et chacun de ses parents, avec le nombre de photos qu'il contient (sous-dossiers compris)
+  const arbre = $derived.by(() => {
+    const n = new Map()
+    for (const x of tous) {
+      const parts = dossierDe(x.chemin).split('/').filter(Boolean)
+      for (let i = 1; i <= parts.length; i++) { const k = '/' + parts.slice(0, i).join('/'); n.set(k, (n.get(k) || 0) + 1) }
+    }
+    const cles = [...n.keys()].sort((a, b) => a.localeCompare(b, 'fr'))
+    // les premiers niveaux communs à tout (/data, /synologyphotos…) ne disent rien : on les saute
+    const total = tous.length
+    const utiles = cles.filter((k) => n.get(k) < total || cles.every((c) => c === k || !c.startsWith(k + '/')))
+    const base = utiles.length ? Math.min(...utiles.map((k) => k.split('/').length)) : 0
+    return utiles.map((k) => ({ cle: k, nom: k.split('/').pop(), niveau: k.split('/').length - base, nombre: n.get(k) }))
+  })
+  $effect(() => { dossier; cherche; untrack(() => { position = 0; chargerScan() }) })
   let s = $state(null)
   let annee = $state(null)
   let marge = $state(2)
@@ -48,7 +74,7 @@
 
   async function chargerListe() {
     erreur = ''
-    liste = await api.get(`/api/scans?statut=${statut}`)
+    tous = await api.get(`/api/scans?statut=${statut}`)
     position = 0
     await chargerScan()
   }
@@ -78,8 +104,24 @@
     try {
       const r = await api.post(`/api/scans/${s.asset_id}/valider`, { annee, marge })
       message = { texte: `Datée ${annee} ±${marge}` + (r.album ? `, rangée dans « ${r.album} ».` : ', laissée à sa place.') + (r.demande ? ' ' + r.demande : ''), journal: r.journal }
-      liste.splice(position, 1)
+      retirer()
       await chargerScan()
+    } catch (e) { erreur = e.message }
+    occupe = false
+  }
+  // retire de la liste la photo traitée (la liste filtrée suit)
+  function retirer() { const id = liste[position]?.asset_id; tous = tous.filter((x) => x.asset_id !== id) }
+  // 2.3.0 : « ce n'est pas cette personne » — le visage est retiré de la personne dans Immich (annulable)
+  let pasElle = $state(null)   // face_id en attente de confirmation
+  async function detacher(v) {
+    if (pasElle !== v.face_id) { pasElle = v.face_id; return }
+    occupe = true
+    erreur = ''
+    try {
+      const r = await api.post(`/api/scans/${s.asset_id}/visages/${v.face_id}/detacher`)
+      message = { texte: `Visage retiré de ${r.nom || 'la personne'} dans Immich : il devient un groupe sans nom, à nommer.`, journal: r.journal }
+      pasElle = null
+      s = await api.get(`/api/scans/${s.asset_id}`)
     } catch (e) { erreur = e.message }
     occupe = false
   }
@@ -90,7 +132,7 @@
     try {
       const r = await api.post(`/api/scans/${s.asset_id}/garder`, { laquelle })
       message = { texte: (laquelle === 'nom' ? `Datée du ${dateJour(r.date_gardee)}, d'après le nom du fichier.` : `Date d'Immich gardée (${dateJour(r.date_gardee)}) : rien n'a été écrit.`) + (r.demande ? ' ' + r.demande : ''), journal: r.journal }
-      liste.splice(position, 1)
+      retirer()
       await chargerScan()
     } catch (e) { erreur = e.message }
     occupe = false
@@ -100,7 +142,7 @@
     try {
       const r = await api.post(`/api/scans/${s.asset_id}/plusieurs`)
       message = { texte: 'Mise de côté : plusieurs années sur ce scan.', journal: r.journal }
-      liste.splice(position, 1)
+      retirer()
       await chargerScan()
     } catch (e) { erreur = e.message }
     occupe = false
@@ -124,7 +166,22 @@
 {/if}
 {#if erreur}<p class="mb-4 text-alerte" role="alert">{erreur}</p>{/if}
 
-{#if !s && liste.length === 0}
+{#if tous.length}
+  <div class="filtres mb-4" role="search" aria-label="Filtrer les photos">
+    <label class="sr-only" for="filtre-dossier">Dossier</label>
+    <select id="filtre-dossier" bind:value={dossier}>
+      <option value="">Tous les dossiers ({tous.length})</option>
+      {#each arbre as d (d.cle)}<option value={d.cle}>{'  '.repeat(Math.max(0, d.niveau)) + d.nom} ({d.nombre})</option>{/each}
+    </select>
+    <label class="sr-only" for="filtre-nom">Nom</label>
+    <input id="filtre-nom" type="search" bind:value={cherche} placeholder="Fichier, dossier ou personne" />
+    {#if dossier || cherche}<button class="bouton" onclick={() => { dossier = ''; cherche = '' }}>Tout voir</button>{/if}
+  </div>
+{/if}
+
+{#if !s && liste.length === 0 && (dossier || cherche)}
+  <p class="secondaire py-10 text-center">Aucune photo {statut === 'a_dater' ? 'à dater' : 'à trancher'} avec ce filtre.</p>
+{:else if !s && liste.length === 0}
   <div class="py-16 text-center">
     <p class="titre-page">{statut === 'a_dater' ? 'Tout est daté' : 'Rien à trancher'}</p>
     <p class="secondaire mx-auto mt-3 max-w-md">
@@ -137,7 +194,8 @@
     </p>
   </div>
 {:else if s}
-  <p class="secondaire mb-3 text-sm">{statut === 'a_dater' ? 'À dater' : 'À trancher'} : photo {position + 1} sur {liste.length}</p>
+  <p class="secondaire mb-3 text-sm">{statut === 'a_dater' ? 'À dater' : 'À trancher'} : photo {position + 1} sur {liste.length}{liste.length < tous.length ? ` (filtre : ${tous.length} en tout)` : ''}
+    {#if liste[position]?.chemin}<span class="chemin" title={liste[position].chemin}> · {liste[position].chemin.split('/').slice(-2).join('/')}</span>{/if}</p>
 
   <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
     <!-- Photo et visages -->
@@ -259,6 +317,27 @@
     </section>
   {/if}
 
+  {#if s.visages.some((v) => v.person_nom && v.etat === 'nomme')}
+    <section class="mt-8" aria-labelledby="titre-reconnus">
+      <h2 id="titre-reconnus" class="font-semibold">Visages reconnus</h2>
+      <p class="secondaire text-sm">Un visage attribué à la mauvaise personne fausse la date. « Ce n'est pas elle » le retire de cette personne dans Immich ; il devient un groupe sans nom, à nommer. Annulable depuis le journal.</p>
+      <div class="mt-3 grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {#each s.visages.filter((v) => v.person_nom && v.etat === 'nomme') as v (v.face_id)}
+          <div class="surface flex items-center gap-3 p-3">
+            <button class="shrink-0 rounded-md" onclick={() => (grand = { asset: s.asset_id, face: v.face_id })} aria-label={'Voir le visage de ' + v.person_nom}>
+              <img src={visage(s.asset_id, v.face_id)} alt="" width="56" height="56" class="aspect-square w-14 rounded-md object-cover" />
+            </button>
+            <div class="min-w-0 flex-1 text-sm">
+              <p class="truncate font-medium">{v.person_nom}</p>
+              <button class="bouton mt-1 min-h-9 text-xs {pasElle === v.face_id ? 'bouton-confirmer' : ''}" onclick={() => detacher(v)}
+                      disabled={occupe || session.lecture_seule}>{pasElle === v.face_id ? `Confirmer : ce n'est pas ${v.person_nom.split(' ')[0]}` : "Ce n'est pas cette personne"}</button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </section>
+  {/if}
+
   {#if personnes.length}
     <section class="mt-8" aria-labelledby="titre-frises">
       <h2 id="titre-frises" class="font-semibold">Comparer avec les frises</h2>
@@ -273,3 +352,10 @@
 {/if}
 
 {#if grand}<Visionneuse asset={grand.asset} face={grand.face} fermer={() => (grand = null)} />{/if}
+
+<style>
+  .filtres { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+  .filtres select, .filtres input { min-height: 2.75rem; min-width: 0; flex: 1 1 14rem; padding: 0 0.75rem; border-radius: 0.6rem; border: 1px solid var(--filet, rgba(255,255,255,.15)); background: transparent; color: inherit; font: inherit; }
+  .filtres select option { background: #1f1c19; }
+  .chemin { overflow-wrap: anywhere; }
+</style>

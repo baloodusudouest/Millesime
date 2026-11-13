@@ -178,6 +178,13 @@ def actualiser(asset_id: str):
     return m().actualiser_scan(asset_id)
 
 
+@app.post("/api/scans/{asset_id}/visages/{face_id}/detacher")
+def detacher(asset_id: str, face_id: str):
+    """2.3.0 : le visage n'est pas la personne nommée : il est retiré de cette personne dans Immich."""
+    ecriture()
+    return m().detacher_visage(asset_id, face_id)
+
+
 @app.post("/api/scans/{asset_id}/plusieurs")
 def plusieurs(asset_id: str):
     return m().plusieurs_annees(asset_id)
