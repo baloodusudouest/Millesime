@@ -94,6 +94,30 @@ def dossier_date(chemin: str | None) -> tuple[str, str] | None:
     return trouve
 
 
+def date_saisie(texte: str) -> str | None:
+    """2.7.0 : une date tapée à la main pour un dossier → « AAAA-MM-JJ » écrite : « 1992 » (1er juillet),
+    « 07/1992 » ou « 1992-07 » (le 15), « 14/07/1992 » ou « 1992-07-14 ». None si illisible."""
+    t = (texte or "").strip()
+    m = re.fullmatch(r"(1[89]\d{2}|20\d{2})", t)
+    if m:
+        return f"{m.group(1)}-07-01"
+    m = re.fullmatch(r"(\d{1,2})[/.-](1[89]\d{2}|20\d{2})", t) or re.fullmatch(r"(1[89]\d{2}|20\d{2})-(\d{1,2})", t)
+    if m:
+        a, mo = (m.group(2), m.group(1)) if len(m.group(1)) <= 2 else (m.group(1), m.group(2))
+        return f"{a}-{int(mo):02d}-15" if 1 <= int(mo) <= 12 else None
+    m = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})[/.-](1[89]\d{2}|20\d{2})", t) or re.fullmatch(r"(1[89]\d{2}|20\d{2})-(\d{1,2})-(\d{1,2})", t)
+    if m:
+        if len(m.group(1)) == 4:
+            a, mo, j = m.group(1), m.group(2), m.group(3)
+        else:
+            j, mo, a = m.group(1), m.group(2), m.group(3)
+        try:
+            return datetime(int(a), int(mo), int(j)).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+    return None
+
+
 def bornes(d: str) -> tuple[int, int]:
     """Les années couvertes par une date de nom : (1985, 1985) ou (1989, 1992)."""
     if "/" in d:
@@ -548,20 +572,28 @@ class Millesime:
                  "annee_proposee": r["annee_proposee"], "marge": r["marge"], "raison": r["raison"]}
                 for r in self.datables() if self._groupe_de(r)[0] == cle]
 
-    def dater_par_nom(self, lot: str, n: int = 100, groupe: str | None = None) -> dict:
+    def dater_par_nom(self, lot: str, n: int = 100, groupe: str | None = None,
+                      groupes: dict[str, str | None] | None = None) -> dict:
         """2.5.0 : « Tout dater d'un coup » par lots de `n` : chaque photo prend la date de son nom (écrite dans Immich,
         notée au journal avec le numéro du lot, pour tout annuler d'un geste)."""
+        # 2.7.0 : `groupes` = {clé du dossier ou de l'album: date tapée à la main ou None (celle du nom)}
+        forcees: dict[str, str | None] = {}
+        for cle, saisie in (groupes or {}).items():
+            forcees[cle] = date_saisie(saisie) if saisie else None
+            if saisie and not forcees[cle]:
+                raise ErreurMillesime(f"Date « {saisie} » illisible : écris 1992, 07/1992 ou 14/07/1992.")
+        voulus = set(forcees) or ({groupe} if groupe else None)
         faites, erreurs = 0, []
-        choix = [r for r in self.datables() if not groupe or self._groupe_de(r)[0] == groupe]
+        choix = [r for r in self.datables() if not voulus or self._groupe_de(r)[0] in voulus]
         for r in choix[:n]:
             try:
-                self.garder_date(r["asset_id"], "dossier", lot=lot)
+                self.garder_date(r["asset_id"], "dossier", lot=lot, date_forcee=forcees.get(self._groupe_de(r)[0]))
                 faites += 1
             except ErreurMillesime as e:
                 erreurs.append(str(e))
                 if len(erreurs) >= 3:
                     break
-        reste = [r for r in self.datables() if not groupe or self._groupe_de(r)[0] == groupe]
+        reste = [r for r in self.datables() if not voulus or self._groupe_de(r)[0] in voulus]
         return {"lot": lot, "faites": faites, "restant": len(reste), "erreurs": erreurs[:3]}
 
     def annuler_lot(self, lot: str) -> dict:
@@ -671,14 +703,14 @@ class Millesime:
                 "annee_estimee": estimee,
                 "marge": marge if estimee is not None else None, "coherent": coherent, "phrase": phrase}
 
-    def garder_date(self, asset_id: str, laquelle: str, lot: str | None = None) -> dict:
+    def garder_date(self, asset_id: str, laquelle: str, lot: str | None = None, date_forcee: str | None = None) -> dict:
         """La photo garde sa date d'Immich (rien n'est écrit), ou prend celle de son nom de fichier (une écriture,
         annulable). Dans les deux cas elle est comptée comme datée."""
         s = self.base.un("SELECT * FROM scans WHERE asset_id=? AND type='non_datee'", asset_id)
         if not s:
             raise ErreurMillesime("Scan inconnu.")
         choisie = {"actuelle": s.get("date_connue"), "nom": s.get("date_nom"),
-                   "dossier": jour_du_dossier(s["date_dossier"]) if s.get("date_dossier") else None}.get(laquelle)
+                   "dossier": date_forcee or (jour_du_dossier(s["date_dossier"]) if s.get("date_dossier") else None)}.get(laquelle)
         if not choisie:
             raise ErreurMillesime("Cette photo n'a pas cette date.")
         avant = {"statut": s["statut"]}

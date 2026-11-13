@@ -154,7 +154,15 @@ def dater_datables(corps: dict = Body(default={})):
     ecriture()
     lot = str(corps.get("lot") or "")[:40] or datetime.now().strftime("nom-%Y%m%d-%H%M%S")
     groupe = str(corps["groupe"]) if corps.get("groupe") else None
-    return m().dater_par_nom(lot, min(max(int(corps.get("n") or 100), 1), 200), groupe)
+    groupes = {str(k): (str(v) if v else None) for k, v in (corps.get("groupes") or {}).items()} or None
+    return m().dater_par_nom(lot, min(max(int(corps.get("n") or 100), 1), 200), groupe, groupes)
+
+
+@app.get("/api/datables/date")
+def date_tapee(saisie: str):
+    """2.7.0 : la date qui serait écrite pour une saisie (aperçu à côté du champ)."""
+    from .service import date_saisie
+    return {"date": date_saisie(saisie)}
 
 
 @app.get("/api/datables/groupes")

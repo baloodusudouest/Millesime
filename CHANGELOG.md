@@ -4,6 +4,12 @@
 
 
 
+
+## 2.7.0 — 14/11/2026
+
+- **Plusieurs dossiers ou albums d'un coup** dans « Datables par le nom » : une case devant chaque dossier ou album. Les cochés s'affichent en tableau, avec leur nombre de photos, la date lue dans leur nom — modifiable (1992, 07/1992 ou 14/07/1992) — et la date qui sera écrite. Un bouton date toutes leurs photos, chacun à sa date ; une date illisible bloque le bouton. Annulable d'un geste. Sur iPhone, le tableau des cochés passe au-dessus de la liste.
+- Tests : 33 du serveur, 18 d'écran.
+
 ## 2.6.0 — 13/11/2026
 
 - **« Datables par le nom » en deux colonnes.** À gauche, chaque dossier (celui qui porte la date, sous-dossiers compris) et chaque album dont le titre date des photos, avec sa date et son nombre de photos, et un champ pour chercher. Un clic montre à droite toutes ses photos en vignettes (un clic en grand) et le bouton « Dater toutes les photos à la date du dossier (…) » (ou de l'album), avec confirmation qui dit la date écrite. Annulable juste après, ou depuis le journal. Sur iPhone, la liste puis les photos, avec un retour.

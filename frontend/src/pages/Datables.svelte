@@ -22,6 +22,58 @@
   let occupe = $state(false)
   let confirme = $state(false)
   let grande = $state(null)
+  // 2.7.0 : plusieurs dossiers ou albums cochés, chacun avec sa date (celle du nom, modifiable)
+  let coches = $state({})            // clé → date tapée ('' : celle du nom)
+  let confirmeSel = $state(false)
+  const selection = $derived((groupes || []).filter((g) => g.cle in coches))
+  const nSel = $derived(selection.reduce((n, g) => n + g.n, 0))
+  // même lecture que le serveur : 1992 · 07/1992 · 1992-07 · 14/07/1992 · 1992-07-14 → « AAAA-MM-JJ » (null : illisible)
+  function lue(t) {
+    t = (t || '').trim()
+    let m
+    if ((m = /^(1[89]\d{2}|20\d{2})$/.exec(t))) return `${m[1]}-07-01`
+    if ((m = /^(\d{1,2})[/.-](1[89]\d{2}|20\d{2})$/.exec(t))) return +m[1] >= 1 && +m[1] <= 12 ? `${m[2]}-${m[1].padStart(2, '0')}-15` : null
+    if ((m = /^(1[89]\d{2}|20\d{2})-(\d{1,2})$/.exec(t))) return +m[2] >= 1 && +m[2] <= 12 ? `${m[1]}-${m[2].padStart(2, '0')}-15` : null
+    let a, mo, j
+    if ((m = /^(\d{1,2})[/.-](\d{1,2})[/.-](1[89]\d{2}|20\d{2})$/.exec(t))) [j, mo, a] = [m[1], m[2], m[3]]
+    else if ((m = /^(1[89]\d{2}|20\d{2})-(\d{1,2})-(\d{1,2})$/.exec(t))) [a, mo, j] = [m[1], m[2], m[3]]
+    else return null
+    const d = new Date(Date.UTC(+a, +mo - 1, +j))
+    return d.getUTCMonth() === +mo - 1 && d.getUTCDate() === +j ? d.toISOString().slice(0, 10) : null
+  }
+  const jourLisible = (iso) => { const [a, m, j] = iso.split('-'); return `${+j === 1 ? '1er' : +j} ${MOIS[+m - 1]} ${a}` }
+  const ecriteSel = (g) => (coches[g.cle] ? (lue(coches[g.cle]) ? jourLisible(lue(coches[g.cle])) : null) : ecrite(g.date))
+  const illisibles = $derived(selection.filter((g) => coches[g.cle] && !lue(coches[g.cle])).length)
+  function cocher(g, oui) {
+    const c = { ...coches }
+    if (oui) c[g.cle] = ''
+    else delete c[g.cle]
+    coches = c
+    confirmeSel = false
+  }
+  async function daterSelection() {
+    if (!confirmeSel) { confirmeSel = true; return }
+    confirmeSel = false
+    occupe = true
+    erreur = ''
+    let lot = '', faites = 0
+    const corps = Object.fromEntries(selection.map((g) => [g.cle, coches[g.cle] || null]))
+    try {
+      while (true) {
+        const r = await api.post('/api/datables/dater', { groupes: corps, lot: lot || undefined, n: 100 })
+        lot = r.lot
+        faites += r.faites
+        if (r.erreurs.length) { erreur = r.erreurs[0]; break }
+        if (!r.faites || !r.restant) break
+      }
+      message = { texte: `${faites} photo${faites > 1 ? 's' : ''} datée${faites > 1 ? 's' : ''} dans ${selection.length} dossier${selection.length > 1 ? 's' : ''} ou album${selection.length > 1 ? 's' : ''}.`, lot }
+      coches = {}
+      choisi = null
+      photos = []
+      await charger()
+    } catch (e) { erreur = e.message }
+    occupe = false
+  }
   const plat = (t) => (t || '').toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
   const montres = $derived((groupes || []).filter((g) => !cherche.trim() || plat(g.nom + ' ' + g.date).includes(plat(cherche.trim()))))
   const total = $derived((groupes || []).reduce((n, g) => n + g.n, 0))
@@ -90,14 +142,16 @@
 {:else if !groupes.length}
   <p class="secondaire py-10 text-center">Aucun dossier ni album dont le nom date des photos encore à dater.</p>
 {:else}
-  <div class="cadre mt-5" class:ouvert={!!choisi}>
+  <div class="cadre mt-5" class:ouvert={!!choisi} class:selection={selection.length > 0}>
     <aside class="gauche" aria-label="Dossiers et albums">
       <p class="secondaire mb-2 text-sm">{groupes.length} dossier{groupes.length > 1 ? 's' : ''} ou album{groupes.length > 1 ? 's' : ''} · {total} photo{total > 1 ? 's' : ''}</p>
       <label class="sr-only" for="cherche-groupe">Chercher</label>
       <input id="cherche-groupe" type="search" bind:value={cherche} placeholder="Chercher un dossier, un album, une année" />
       <ul class="mt-2">
         {#each montres as g (g.cle)}
-          <li>
+          <li class="ligne-groupe">
+            <input type="checkbox" class="coche" checked={g.cle in coches} onchange={(e) => cocher(g, e.currentTarget.checked)}
+                   aria-label={'Choisir ' + court(g)} />
             <button class="groupe" aria-pressed={choisi?.cle === g.cle} onclick={() => ouvrir(g)}>
               <span class="sorte" aria-hidden="true">{g.sorte === 'album' ? '▣' : '▤'}</span>
               <span class="min-w-0 flex-1">
@@ -112,9 +166,35 @@
     </aside>
 
     <section class="droite" aria-label="Photos du dossier choisi">
-      {#if !choisi}
-        <p class="secondaire py-10 text-center">Choisis un dossier ou un album à gauche.</p>
-      {:else}
+      {#if selection.length}
+        <div class="surface mb-5 p-4" role="region" aria-label="Dossiers cochés">
+          <h2 class="font-semibold">{selection.length} dossier{selection.length > 1 ? 's' : ''} ou album{selection.length > 1 ? 's' : ''} cochés · {nSel} photo{nSel > 1 ? 's' : ''}</h2>
+          <p class="secondaire text-sm">Chaque dossier prend la date de son nom, ou celle que tu tapes (1992, 07/1992 ou 14/07/1992).</p>
+          <div class="tableau"><table class="mt-3 w-full text-sm">
+            <thead><tr><th class="text-left">Dossier ou album</th><th>Photos</th><th class="text-left">Date</th><th class="text-left">Écrite</th></tr></thead>
+            <tbody>
+              {#each selection as g (g.cle)}
+                <tr>
+                  <td class="nomsel">{court(g)}</td>
+                  <td class="text-center">{g.n}</td>
+                  <td><input class="date" type="text" inputmode="numeric" placeholder={dateDite(g.date)} value={coches[g.cle]}
+                             oninput={(e) => { coches = { ...coches, [g.cle]: e.currentTarget.value }; confirmeSel = false }}
+                             aria-label={'Date pour ' + court(g)} aria-invalid={!!coches[g.cle] && !lue(coches[g.cle])} /></td>
+                  <td class:alerte={!ecriteSel(g)}>{ecriteSel(g) || 'illisible'}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table></div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button class="bouton bouton-confirmer" onclick={daterSelection} disabled={occupe || session.lecture_seule || illisibles > 0}>
+              {occupe ? 'Datation…' : confirmeSel ? `Confirmer : dater les ${nSel} photos` : `Dater les ${nSel} photos des ${selection.length} dossiers`}</button>
+            <button class="bouton" onclick={() => { coches = {}; confirmeSel = false }} disabled={occupe}>Tout décocher</button>
+          </div>
+        </div>
+      {/if}
+      {#if !choisi && !selection.length}
+        <p class="secondaire py-10 text-center">Choisis un dossier ou un album à gauche, ou coche-en plusieurs.</p>
+      {:else if choisi}
         <button class="lien retour-groupes mb-2" onclick={() => (choisi = null)}>‹ Dossiers et albums</button>
         <h2 class="text-lg font-semibold" style="overflow-wrap:anywhere">{choisi.sorte === 'album' ? 'Album « ' + choisi.nom + ' »' : choisi.nom}</h2>
         <p class="secondaire text-sm">Date lue : {dateDite(choisi.date)} · {choisi.n} photo{choisi.n > 1 ? 's' : ''}{choisi.sans_visage < choisi.n ? ` (dont ${choisi.n - choisi.sans_visage} où les visages confirment)` : ''}</p>
@@ -147,9 +227,22 @@
 <style>
   .cadre { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 900px) { .cadre { grid-template-columns: 340px minmax(0, 1fr); } .retour-groupes { display: none; } }
-  @media (max-width: 899px) { .cadre.ouvert .gauche { display: none; } .cadre:not(.ouvert) .droite { display: none; } }
+  @media (max-width: 899px) {
+    .cadre.ouvert .gauche { display: none; }
+    .cadre:not(.ouvert):not(.selection) .droite { display: none; }
+    .cadre.selection:not(.ouvert) .droite { order: -1; }   /* sur iPhone : les dossiers cochés au-dessus de la liste */
+  }
+  .tableau { overflow-x: auto; }
   .gauche input { width: 100%; min-height: 2.75rem; padding: 0 0.75rem; border-radius: 0.6rem; border: 1px solid var(--color-filet); background: transparent; color: inherit; font: inherit; }
   .gauche ul { display: grid; gap: 0.35rem; max-height: 70dvh; overflow-y: auto; padding: 0; margin: 0.5rem 0 0; list-style: none; }
+  .ligne-groupe { display: flex; align-items: center; gap: 0.5rem; }
+  .coche { width: 1.25rem; height: 1.25rem; flex: none; accent-color: var(--color-or); }
+  table th { font-weight: 600; padding: 0.3rem 0.4rem; color: var(--color-craie); }
+  table td { padding: 0.3rem 0.4rem; border-top: 1px solid var(--color-filet); vertical-align: middle; }
+  .nomsel { overflow-wrap: anywhere; }
+  .date { width: 100%; min-width: 6.5rem; min-height: 2.5rem; padding: 0 0.5rem; border-radius: 0.5rem; border: 1px solid var(--color-filet); background: transparent; color: inherit; font: inherit; }
+  .date[aria-invalid='true'] { border-color: var(--color-alerte, #e5484d); }
+  .alerte { color: var(--color-alerte, #e5484d); }
   .groupe { display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: 3.25rem; padding: 0.5rem 0.75rem; text-align: left; border: 1px solid var(--color-filet); border-radius: 0.75rem; background: var(--color-verre-2); color: inherit; }
   .groupe[aria-pressed='true'] { border-color: var(--color-or); box-shadow: inset 3px 0 0 var(--color-or); }
   .groupe .nom { display: block; overflow-wrap: anywhere; }
