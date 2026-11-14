@@ -1,6 +1,9 @@
 # Journal des versions
 
 
+
+## 2.7.3 — 14 novembre 2026
+- **Un jour précis dans le nom est reconnu.** « 1985-12-25 Noël », « 25.12.1985 », « 9 avril 1988 » ou « 1er mai 1990 » donnent ce jour-là, au lieu du 15 du mois. Vaut pour les dossiers et pour les albums ; un album au jour précis passe avant un album au mois ou à l'année. Un jour impossible (30 février) retombe sur le mois. Dans « Datables par le nom », la date proposée et la date écrite affichent ce jour ; dans « Dater », la date du dossier aussi.
 ## 2.7.2 — 14 novembre 2026
 - **Datables par le nom : la date en face du dossier.** Dans la liste de gauche, chaque dossier ou album a sa date proposée sur la même ligne, à droite de son nom. Une fois coché, elle devient un champ (vide : la date du nom ; sinon celle que tu tapes), avec en dessous la date qui sera écrite, ou « date illisible ». Le tableau à droite disparaît : il ne reste que le total, « Dater » et « Tout décocher ». La liste est plus large sur PC.
 ## 2.7.1 — 14 novembre 2026

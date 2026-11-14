@@ -282,7 +282,7 @@
           <dl class="grid gap-1">
             {#if c.date_connue}<div class="flex justify-between gap-3"><dt class="secondaire">Date dans Immich</dt><dd>{dateJour(c.date_connue)}</dd></div>{/if}
             {#if c.date_nom}<div class="flex justify-between gap-3"><dt class="secondaire">Dans le nom du fichier</dt><dd>{dateJour(c.date_nom)}</dd></div>{/if}
-            {#if c.date_dossier}<div class="flex justify-between gap-3"><dt class="secondaire">Dans {c.date_dossier_source}</dt><dd>{c.date_dossier}</dd></div>{/if}
+            {#if c.date_dossier}<div class="flex justify-between gap-3"><dt class="secondaire">Dans {c.date_dossier_source}</dt><dd>{c.date_dossier.length === 10 ? dateJour(c.date_dossier) : c.date_dossier}</dd></div>{/if}
             {#if c.annee_estimee !== null}<div class="flex justify-between gap-3"><dt class="secondaire">Estimée par Millésime</dt><dd>{c.annee_estimee} ±{c.marge}</dd></div>{/if}
           </dl>
           <p class="mt-2 font-semibold {c.coherent === false ? 'text-alerte' : c.coherent ? 'text-or' : ''}">{c.phrase}</p>
