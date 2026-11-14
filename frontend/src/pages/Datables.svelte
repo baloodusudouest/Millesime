@@ -6,11 +6,13 @@
 
   const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
   // « 1983-01 » → « janvier 1983 » ; « 1989/1992 » → « 1989 à 1992 »
-  const dateDite = (d) => (d.includes('/') ? d.replace('/', ' à ') : d.length === 7 ? `${MOIS[+d.slice(5) - 1]} ${d.slice(0, 4)}` : d)
+  // 2.7.3 : « 1985-12-25 » → « 25 décembre 1985 »
+  const dateDite = (d) => (d.includes('/') ? d.replace('/', ' à ') : d.length === 10 ? `${+d.slice(8) === 1 ? '1er' : +d.slice(8)} ${MOIS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`
+    : d.length === 7 ? `${MOIS[+d.slice(5) - 1]} ${d.slice(0, 4)}` : d)
   // ce qui sera écrit dans Immich
   const ecrite = (d) => {
     if (d.includes('/')) { const [a, b] = d.split('/').map(Number); return `1er juillet ${Math.floor((a + b) / 2)}` }
-    return d.length === 7 ? `15 ${dateDite(d)}` : `1er juillet ${d}`
+    return d.length === 10 ? dateDite(d) : d.length === 7 ? `15 ${dateDite(d)}` : `1er juillet ${d}`
   }
   const court = (g) => (g.sorte === 'album' ? g.nom : g.nom.split('/').filter(Boolean).slice(-2).join(' › '))
 

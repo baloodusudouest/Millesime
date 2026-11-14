@@ -760,6 +760,12 @@ def test_250_dates_dans_les_noms_et_albums():
     assert date_d_un_nom("1923 2023") is None and date_d_un_nom("Boite 156-184") is None and date_d_un_nom("85 86") is None
     assert date_du_dossier("/p/Vacances 1985/Plage/a.jpg") == "1985"
     assert jour_du_dossier("1989/1992") == "1990-07-01"
+    # 2.7.3 : un jour précis dans le nom
+    assert date_d_un_nom("1985-12-25 Noel") == "1985-12-25" and date_d_un_nom("04 1988-04-09 mariage") == "1988-04-09"
+    assert date_d_un_nom("25.12.1985 Noël") == "1985-12-25" and date_d_un_nom("9 avril 1988") == "1988-04-09"
+    assert date_d_un_nom("1er mai 1990") == "1990-05-01" and date_d_un_nom("1985-02-30 x") == "1985-02"    # jour impossible
+    assert jour_du_dossier("1988-04-09") == "1988-04-09"
+    assert date_du_dossier("/p/1988/04/1988-04-09 mariage/a.jpg") == "1988-04-09"
 
 
 def test_250_tuile_datables_lot_et_annulation(env):

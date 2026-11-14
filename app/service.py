@@ -36,6 +36,19 @@ _MOIS_ANNEE = re.compile(r"\b(" + "|".join(sorted(_MOIS_NOMS, key=len, reverse=T
 _ANNEE_MOIS = re.compile(r"^(1[89]\d{2}|20\d{2})[-_. ](0[1-9]|1[0-2])(?:\b|$)")
 _ANNEE = re.compile(r"(?<!\d)(1[89]\d{2}|20\d{2})(?!\d)")
 _MOIS = re.compile(r"^(0[1-9]|1[0-2])(?:\b|$)")
+# 2.7.3 : un jour précis dans le nom : « 1985-12-25 Noël », « 25.12.1985 », « 9 avril 1988 »
+_AMJ = re.compile(r"(?<!\d)(1[89]\d{2}|20\d{2})[-_.](0[1-9]|1[0-2])[-_.](0[1-9]|[12]\d|3[01])(?!\d)")
+_JMA = re.compile(r"(?<!\d)(0?[1-9]|[12]\d|3[01])[-_./](0?[1-9]|1[0-2])[-_./](1[89]\d{2}|20\d{2})(?!\d)")
+_J_MOIS_A = re.compile(r"(?<!\d)(0?[1-9]|[12]\d|3[01])(?:er)?\s+(" + "|".join(sorted(_MOIS_NOMS, key=len, reverse=True))
+                       + r")\.?\s+(1[89]\d{2}|20\d{2})\b")
+
+
+def _jour(a: str, mo: str | int, j: str) -> str | None:
+    try:
+        d = datetime(int(a), int(mo), int(j))
+    except ValueError:
+        return None
+    return d.strftime("%Y-%m-%d") if d <= datetime.now() else None
 ECART_MAX = 20                                       # « 1923-2023 » ne dit rien d'une photo
 # un nom de lot dit quand la photo a été numérisée, importée ou sauvegardée, pas quand elle a été prise
 _LOT = re.compile(r"\b(numeris\w*|scans?|scanne\w*|import\w*|sauvegardes?|backups?|exports?|telecharg\w*)\b")
@@ -47,12 +60,20 @@ def _sans_accents(t: str) -> str:
 
 
 def date_d_un_nom(nom: str, suivant: str = "") -> str | None:
-    """« AAAA-MM », « AAAA » ou « AAAA/AAAA » (une fourchette) lue dans un nom ; `suivant` : le sous-dossier
+    """« AAAA-MM-JJ » (2.7.3), « AAAA-MM », « AAAA » ou « AAAA/AAAA » (une fourchette) lue dans un nom ; `suivant` : le sous-dossier
     qui suit, pour « …/1983/01/… ». None si le nom ne dit pas de date."""
     n = _sans_accents(nom.strip())
     if _LOT.search(n):
         return None                                  # « Numérisations 2010 » : l'année du scan, pas de la photo
     maintenant_ = datetime.now().year
+    for motif, ordre in ((_AMJ, "amj"), (_JMA, "jma"), (_J_MOIS_A, "jnoma")):
+        m = motif.search(n)
+        if m:
+            g = m.groups()
+            jour = (_jour(g[0], g[1], g[2]) if ordre == "amj" else _jour(g[2], g[1], g[0]) if ordre == "jma"
+                    else _jour(g[2], _MOIS_NOMS[g[1]], g[0]))
+            if jour:
+                return jour
     m = _MOIS_ANNEE.search(n)
     if m and int(m.group(2)) <= maintenant_:
         return f"{m.group(2)}-{_MOIS_NOMS[m.group(1)]:02d}"
@@ -89,7 +110,7 @@ def dossier_date(chemin: str | None) -> tuple[str, str] | None:
         d = date_d_un_nom(m, suivant)
         if d:
             seul = date_d_un_nom(m) or ""
-            fin = i + 2 if len(d) == 7 and len(seul) != 7 else i + 1     # le mois vient du sous-dossier « 01 »
+            fin = i + 2 if len(d) == 7 and len(seul) not in (7, 10) else i + 1     # le mois vient du sous-dossier « 01 »
             trouve = ("/".join(morceaux[:fin]), d)
     return trouve
 
@@ -129,6 +150,8 @@ def bornes(d: str) -> tuple[int, int]:
 def jour_du_dossier(d: str) -> str:
     """La date écrite : le 15 du mois, le 1er juillet pour une année seule, le 1er juillet de l'année du milieu
     pour une fourchette."""
+    if len(d) == 10:
+        return d                                     # 2.7.3 : le jour lu dans le nom
     if len(d) == 7 and "/" not in d:
         return f"{d}-15"
     a, b = bornes(d)
@@ -302,7 +325,7 @@ class Millesime:
         except ErreurImmich as e:
             log.warning("Albums illisibles : %s", e)
             return res
-        precision = lambda d: (len(d) == 7 and "/" not in d, -(bornes(d)[1] - bornes(d)[0]))
+        precision = lambda d: (0 if "/" in d else len(d), -(bornes(d)[1] - bornes(d)[0]))   # jour > mois > année
         for al in albums:
             d = date_d_un_nom(al.get("albumName") or "")
             if not d:
