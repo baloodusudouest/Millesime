@@ -18,7 +18,7 @@ CLE = "cle-app"
 
 def construire():
     personnes = {
-        "julien": {"id": "julien", "name": "Julien B", "birthDate": "1980-05-12"},
+        "hugo": {"id": "hugo", "name": "Hugo B", "birthDate": "1980-05-12"},
         "alex": {"id": "alex", "name": "Alex DUVAL", "birthDate": "1985-03-02"},
         "mamie": {"id": "mamie", "name": "Jeanne DUVAL", "birthDate": "1944-09-20"},
         "sansdate": {"id": "sansdate", "name": "Rémi J", "birthDate": None},
@@ -51,31 +51,31 @@ def construire():
         tid = f"t-{an}"
         tags[tid] = {"id": tid, "name": f"{an}-06", "value": f"Numérisation/{an}-06"}
         for j in range(2):
-            ajouter(f"d{an}-{j}", date(an, 6, 15), ["julien", "alex", "mamie"][: 2 + j], tid, f"{an}-06-15T12:00:00.000Z")
+            ajouter(f"d{an}-{j}", date(an, 6, 15), ["hugo", "alex", "mamie"][: 2 + j], tid, f"{an}-06-15T12:00:00.000Z")
     # scans non datés : vraie année 1992..2000
     vraies = {}
     for i, an in enumerate([1992, 1994, 1996, 1998, 2000, 1993]):
         aid = f"nd{i}"
         vraies[aid] = an
-        ajouter(aid, date(an, 7, 1), ["julien", "alex"] if i % 2 == 0 else ["mamie", "inconnu1"], "t-nd",
+        ajouter(aid, date(an, 7, 1), ["hugo", "alex"] if i % 2 == 0 else ["mamie", "inconnu1"], "t-nd",
                 "1900-01-01T00:00:00.000Z")
     ajouter("nd-sans", date(1995, 1, 1), ["inconnu1", "inconnu2", None], "t-nd", "1900-01-01T00:00:00.000Z")
     ajouter("nd-remi", date(1995, 1, 1), ["sansdate"], "t-nd", "1900-01-01T00:00:00.000Z")
-    # photos numériques de Julien (frise)
+    # photos numériques de Hugo (frise)
     for an in (2008, 2014, 2020):
-        ajouter(f"num{an}", date(an, 3, 1), ["julien"], None, f"{an}-03-01T09:00:00.000Z")
+        ajouter(f"num{an}", date(an, 3, 1), ["hugo"], None, f"{an}-03-01T09:00:00.000Z")
     albums["al-nd"] = {"id": "al-nd", "albumName": "Non datées Numérisation",
                        "assets": {a for a in tag_assets["t-nd"]}}
     vraies_sources = {}
     # 2.2.0 : un album et un dossier de vieilles numérisations, sans tag. Leur date dans Immich est celle
     # de la numérisation (2003), pas celle de la prise de vue ; un nom de fichier porte parfois une date.
     for i, (an, nom) in enumerate(((1995, "IMG_0001.jpg"), (1997, "scan 1997-08-14.jpg"), (1999, "IMG_0003.jpg"))):
-        ajouter(f"alb{i}", date(an, 7, 1), ["julien", "alex"], None, "2003-11-02T10:00:00.000Z", envoi="2020-01-05T10:00:00.000Z")
+        ajouter(f"alb{i}", date(an, 7, 1), ["hugo", "alex"], None, "2003-11-02T10:00:00.000Z", envoi="2020-01-05T10:00:00.000Z")
         assets[f"alb{i}"].update(originalFileName=nom, originalPath=f"/bibliotheque/Albums/Vieux scans/{nom}")
         vraies_sources[f"alb{i}"] = an
     albums["al-vieux"] = {"id": "al-vieux", "albumName": "Vieux scans", "assets": {"alb0", "alb1", "alb2"}}
     for i, an in enumerate((1991, 1996)):
-        ajouter(f"dos{i}", date(an, 7, 1), ["mamie", "julien"], None, f"{an}-07-0{i + 2}T10:00:00.000Z", envoi="2021-03-01T10:00:00.000Z")
+        ajouter(f"dos{i}", date(an, 7, 1), ["mamie", "hugo"], None, f"{an}-07-0{i + 2}T10:00:00.000Z", envoi="2021-03-01T10:00:00.000Z")
         assets[f"dos{i}"].update(originalFileName=f"photo{i}.jpg", originalPath=f"/bibliotheque/Avant/Numérisations 2010/photo{i}.jpg")
         vraies_sources[f"dos{i}"] = an
     return {"personnes": personnes, "tags": tags, "assets": assets, "tag_assets": tag_assets,

@@ -151,7 +151,7 @@ def test_nommer_et_etat_carnet(env):
     g = client.get("/api/nommer").json()
     ids = [x["person_id"] for x in g["groupes"]]
     assert ids[0] == "inconnu1"            # le plus fréquent sur les non datées
-    assert "julien" not in ids
+    assert "hugo" not in ids
     assert any(x["nom"] == "Rémi J" for x in g["sans_naissance"])
     assert client.post("/api/nommer/inconnu1", json={"nom": "  Paul   GARNIER "}).json()["nom"] == "Paul GARNIER"
     assert E["personnes"]["inconnu1"]["name"] == "Paul GARNIER"
@@ -166,8 +166,8 @@ def test_frise_et_images(env):
     client, E = env
     connecter(client)
     client.post("/api/synchroniser")
-    f = client.get("/api/personnes/julien/frise").json()
-    assert f["nom"] == "Julien B" and len(f["elements"]) >= 5
+    f = client.get("/api/personnes/hugo/frise").json()
+    assert f["nom"] == "Hugo B" and len(f["elements"]) >= 5
     assert not any(e["asset_id"].startswith("nd") for e in f["elements"])
     assert {"tampon", "numérique"} <= {e["source"] for e in f["elements"]}
     e0 = f["elements"][0]
@@ -254,7 +254,7 @@ def test_suggestions_fusion_et_annulation(env):
     client.post("/api/synchroniser")
     sug = client.get("/api/nommer/suggestions").json()
     noms = [s["nom"] for s in sug]
-    assert "Julien B" in noms and "" not in noms
+    assert "Hugo B" in noms and "" not in noms
     assert sug[0]["sur_scans"] >= sug[-1]["sur_scans"]          # présents sur les scans d'abord
     # un nom existant est refusé (accents et casse ignorés) : il faut fusionner
     r = client.post("/api/nommer/inconnu1", json={"nom": "jeanne duval"})
@@ -290,7 +290,7 @@ def test_annuler_un_nommage_et_boite(env):
     client.post(f"/api/journal/{j['id']}/annuler")
     assert E["personnes"]["inconnu2"]["name"] == ""
     b = client.get("/api/boite/nd0/nd0-f0").json()
-    assert 0 < b["x"] < 1 and 0 < b["l"] < 1 and b["nom"] == "Julien B"
+    assert 0 < b["x"] < 1 and 0 < b["l"] < 1 and b["nom"] == "Hugo B"
 
 
 def test_nommer_depuis_la_photo(env):
@@ -329,9 +329,9 @@ def test_relire_une_photo(env):
     client, E = env
     connecter(client)
     client.post("/api/synchroniser")
-    # dans Immich : le visage non attribué de nd-sans est rattaché à Julien, et le groupe inconnu2 est nommé
+    # dans Immich : le visage non attribué de nd-sans est rattaché à Hugo, et le groupe inconnu2 est nommé
     f2 = next(f for f in E["assets"]["nd-sans"]["faces"] if f["id"] == "nd-sans-f2")
-    f2["person"] = E["personnes"]["julien"]
+    f2["person"] = E["personnes"]["hugo"]
     E["personnes"]["inconnu2"]["name"] = "Lucie MARTIN"
     s = client.get("/api/scans/nd-sans").json()
     assert s["statut"] == "a_trancher"
@@ -339,8 +339,8 @@ def test_relire_une_photo(env):
     assert r["changes"] == 2 and r["a_calculer"] == 1
     s = client.get("/api/scans/nd-sans").json()
     noms = {v["face_id"]: v["person_nom"] for v in s["visages"]}
-    assert noms["nd-sans-f2"] == "Julien B" and noms["nd-sans-f1"] == "Lucie MARTIN"
-    assert s["statut"] == "a_analyser"            # le visage de Julien attend le calcul sur le PC
+    assert noms["nd-sans-f2"] == "Hugo B" and noms["nd-sans-f1"] == "Lucie MARTIN"
+    assert s["statut"] == "a_analyser"            # le visage de Hugo attend le calcul sur le PC
 
 
 def test_lien_immich_pour_le_navigateur(monkeypatch):
@@ -534,7 +534,7 @@ def test_160_lecture_seule_rien_n_est_ecrit(env):
     r = client.post(f"/api/scans/{cible}/valider", json={"annee": s["annee_proposee"], "marge": s["marge"]})
     assert r.status_code == 409 and "lecture seule" in r.json()["detail"]
     assert client.post("/api/nommer/inconnu1", json={"nom": "Quelqu'un"}).status_code == 409
-    assert client.post("/api/nommer/inconnu1/fusionner", json={"cible": "julien"}).status_code == 409
+    assert client.post("/api/nommer/inconnu1/fusionner", json={"cible": "hugo"}).status_code == 409
     assert E["requetes"] == [] and len(client.get("/api/journal").json()) == avant
     assert client.get(f"/api/scans/{cible}").json()["statut"] == "a_dater"
     assert client.post("/api/synchroniser").status_code == 200                # la lecture continue
@@ -695,21 +695,21 @@ def test_filtres_dater_et_visage_detache(env):
     client.post("/api/synchroniser")
     liste = client.get("/api/scans?statut=a_analyser").json()
     nd0 = next(x for x in liste if x["asset_id"] == "nd0")
-    assert nd0["chemin"] == "/photos/Scans/Lot A/nd0.jpg" and nd0["noms"] == ["Alex DUVAL", "Julien B"]
+    assert nd0["chemin"] == "/photos/Scans/Lot A/nd0.jpg" and nd0["noms"] == ["Alex DUVAL", "Hugo B"]
     assert {x["chemin"].split("/")[3] for x in liste if x["chemin"]} == {"Lot A", "Lot B"}
     r = client.post("/api/scans/nd0/visages/nd0-f0/detacher").json()
-    assert r["ok"] and r["nom"] == "Julien B"
+    assert r["ok"] and r["nom"] == "Hugo B"
     face = next(f for f in E["assets"]["nd0"]["faces"] if f["id"] == "nd0-f0")
     nouvelle = (face["person"] or {}).get("id")
-    assert nouvelle and nouvelle != "julien" and not E["personnes"][nouvelle]["name"]
+    assert nouvelle and nouvelle != "hugo" and not E["personnes"][nouvelle]["name"]
     s = client.get("/api/scans/nd0").json()
     assert next(v for v in s["visages"] if v["face_id"] == "nd0-f0")["person_nom"] in (None, "")
     assert client.post("/api/scans/nd0/visages/nd0-f0/detacher").status_code == 400      # il n'est plus rattaché à une personne nommée
     j = next(x for x in client.get("/api/journal").json() if x["action"] == "detacher")
     assert client.post(f"/api/journal/{j['id']}/annuler").json()["ok"]
     face = next(f for f in E["assets"]["nd0"]["faces"] if f["id"] == "nd0-f0")
-    assert face["person"]["id"] == "julien"
-    assert next(v for v in client.get("/api/scans/nd0").json()["visages"] if v["face_id"] == "nd0-f0")["person_nom"] == "Julien B"
+    assert face["person"]["id"] == "hugo"
+    assert next(v for v in client.get("/api/scans/nd0").json()["visages"] if v["face_id"] == "nd0-f0")["person_nom"] == "Hugo B"
 
 
 def test_240_date_lue_dans_le_dossier():
@@ -746,17 +746,17 @@ def test_240_synchro_legere(env):
     b = client.post("/api/synchroniser").json()
     assert b["complete"] and b["relues"] > 10
     E["requetes"].clear()
-    E["personnes"]["julien"]["name"] = "Julien BERT"                                    # renommé dans Immich
+    E["personnes"]["hugo"]["name"] = "Hugo BERNARD"                                    # renommé dans Immich
     b = main.ETAT["m"].synchroniser()                                                    # la synchro de chaque heure
     assert not b["complete"] and b["relues"] < 10
-    assert client.get("/api/scans/nd0").json()["visages"][0]["person_nom"] == "Julien BERT"
+    assert client.get("/api/scans/nd0").json()["visages"][0]["person_nom"] == "Hugo BERNARD"
 
 
 def test_250_dates_dans_les_noms_et_albums():
     from app.service import date_d_un_nom, date_du_dossier, jour_du_dossier
     assert date_d_un_nom("Noël 1992 chez mamie") == "1992" and date_d_un_nom("juillet 1985") == "1985-07"
-    assert date_d_un_nom("déc. 1992 neige") == "1992-12" and date_d_un_nom("Francine Philippe 1989-1992") == "1989/1992"
-    assert date_d_un_nom("Numérisations 2010") is None and date_d_un_nom("1998 Numérisation Yves") is None   # lots de scans
+    assert date_d_un_nom("déc. 1992 neige") == "1992-12" and date_d_un_nom("Paule Garnier 1989-1992") == "1989/1992"
+    assert date_d_un_nom("Numérisations 2010") is None and date_d_un_nom("1998 Numérisation Marc") is None   # lots de scans
     assert date_d_un_nom("1923 2023") is None and date_d_un_nom("Boite 156-184") is None and date_d_un_nom("85 86") is None
     assert date_du_dossier("/p/Vacances 1985/Plage/a.jpg") == "1985"
     assert jour_du_dossier("1989/1992") == "1990-07-01"

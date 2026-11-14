@@ -15,7 +15,7 @@ CLE = "cle-test"
 
 def _donnees():
     personnes = {
-        "p1": {"id": "p1", "name": "Julien B", "birthDate": "1980-05-12"},
+        "p1": {"id": "p1", "name": "Hugo B", "birthDate": "1980-05-12"},
         "p2": {"id": "p2", "name": "Alex", "birthDate": "1975-02-01"},
         "p3": {"id": "p3", "name": "Sans Date", "birthDate": None},
     }
