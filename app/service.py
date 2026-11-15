@@ -209,13 +209,19 @@ class Millesime:
             raise ErreurMillesime("Synchronisation déjà en cours.")
         try:
             debut = datetime.now()
-            pref = self.cfg.tag_prefixe + "/"
+            self.lire_chambre_noire()
+            if not self.tag_prefixe:
+                raise ErreurMillesime("Libellé des numérisations inconnu : Chambre noire n'a pas encore répondu et "
+                                      "MILLESIME_TAG_PREFIXE est vide. Rien n'a été modifié.")
+            pref = self.tag_prefixe + "/"
             tags = self.immich.tags()
-            non_datee = next((t for t in tags if (t.get("value") or "") == pref + self.cfg.tag_non_datee), None)
+            nom_nd = self.tag_non_datee_complet
+            non_datee = next((t for t in tags if (t.get("value") or "") == nom_nd), None)
             if not non_datee:
                 # 1.5.1 : un nom mal saisi dans la stack ne doit pas vider la liste des scans en silence
-                raise ErreurMillesime(f"Le tag « {pref}{self.cfg.tag_non_datee} » est introuvable dans Immich : vérifie "
-                                      "MILLESIME_TAG_PREFIXE et MILLESIME_TAG_NON_DATEE dans la stack. Rien n'a été modifié.")
+                origine = ("le libellé réglé dans Chambre noire (aucun envoi de non datées encore fait ?)" if self.noms_chambre_noire()
+                           else "MILLESIME_TAG_PREFIXE et MILLESIME_TAG_NON_DATEE dans la stack")
+                raise ErreurMillesime(f"Le tag « {nom_nd} » est introuvable dans Immich : vérifie {origine}. Rien n'a été modifié.")
             dates = []
             for t in tags:
                 v = t.get("value") or ""
@@ -562,6 +568,7 @@ class Millesime:
                 "lu_par": {"carnet": (self.base.lire("carnet_vu") or {}).get("le"),
                            "ha": (self.base.lire("ha_vu") or {}).get("le"),
                            "ha_ouvert": bool(self.cfg.jeton_ha)},
+                "chambre_noire": self.etat_chambre_noire(),
                 "dernier_calcul": self.base.lire("dernier_calcul")}
 
     def datables(self) -> list[dict]:
@@ -854,9 +861,60 @@ class Millesime:
         self.base.executer("UPDATE scans SET statut='plusieurs', vu_le=? WHERE asset_id=?", maintenant(), asset_id)
         return {"journal": jid}
 
+    # ------------------------------------------------------------------ noms lus dans Chambre noire (2.9.0)
+    def noms_chambre_noire(self) -> dict | None:
+        """Derniers noms lus dans Chambre noire (gardés si elle ne répond plus) ; None si non reliée."""
+        if not self.cfg.jeton_chambre_noire:
+            return None
+        return self.base.lire("chambre_noire_noms")
+
+    def lire_chambre_noire(self) -> dict | None:
+        """Lit le libellé, l'album et le tag des non datées dans Chambre noire. N'écrit rien chez elle.
+        En cas d'échec, l'erreur est notée et les derniers noms lus restent en usage."""
+        if not self.cfg.jeton_chambre_noire:
+            return None
+        import requests
+        try:
+            r = requests.get(self.cfg.chambre_noire_url + "/externe/noms", timeout=10,
+                             headers={"Authorization": f"Bearer {self.cfg.jeton_chambre_noire}"})
+            if r.status_code != 200:
+                raise ErreurMillesime(f"Chambre noire a répondu {r.status_code}"
+                                      + (" (adresse fermée : CHAMBRE_NOIRE_JETON_MILLESIME vide)" if r.status_code == 404 else
+                                         " (jeton refusé)" if r.status_code == 401 else ""))
+            j = r.json()
+            if not j.get("regle"):
+                raise ErreurMillesime("le libellé n'est pas encore réglé dans Chambre noire (Réglages › Noms dans Immich)")
+            noms = {k: str(j[k]) for k in ("libelle", "album_non_datees", "tag_non_datee")}
+        except (requests.RequestException, ValueError, KeyError, ErreurMillesime) as e:
+            detail = str(e) if isinstance(e, ErreurMillesime) else f"Chambre noire ne répond pas ({e.__class__.__name__})"
+            self.base.ecrire("chambre_noire_erreur", {"le": maintenant(), "detail": detail})
+            return self.noms_chambre_noire()
+        noms["le"] = maintenant()
+        self.base.ecrire("chambre_noire_noms", noms)
+        self.base.ecrire("chambre_noire_erreur", None)
+        return noms
+
+    @property
+    def tag_prefixe(self) -> str:
+        cn = self.noms_chambre_noire()
+        return cn["libelle"] if cn else self.cfg.tag_prefixe
+
+    @property
+    def tag_non_datee_complet(self) -> str:
+        cn = self.noms_chambre_noire()
+        return cn["tag_non_datee"] if cn else f"{self.cfg.tag_prefixe}/{self.cfg.tag_non_datee}"
+
+    def etat_chambre_noire(self) -> dict:
+        cn = self.noms_chambre_noire()
+        return {"relie": bool(self.cfg.jeton_chambre_noire), "noms": cn,
+                "erreur": self.base.lire("chambre_noire_erreur") if self.cfg.jeton_chambre_noire else None}
+
     # ------------------------------------------------------------------ réglages et sources (2.2.0)
     @property
     def album_non_datees(self) -> str:
+        cn = self.noms_chambre_noire()
+        if cn:
+            return cn["album_non_datees"]        # 2.9.0 : Chambre noire passe devant les Réglages et la stack
         return self.base.lire("album_non_datees") or self.cfg.album_non_datees
 
     @property
@@ -865,11 +923,15 @@ class Millesime:
 
     def regler_albums(self, album_non_datees: str, modele_album: str) -> dict:
         album_non_datees, modele_album = (album_non_datees or "").strip(), (modele_album or "").strip()
+        depuis_cn = bool(self.noms_chambre_noire())
+        if depuis_cn:
+            album_non_datees = self.album_non_datees    # réglé dans Chambre noire : on ne garde que le modèle
         if not album_non_datees:
             raise ErreurMillesime("Le nom de l'album des scans non datés est vide.")
         if "{annee}" not in modele_album:
             raise ErreurMillesime("Le modèle d'album doit contenir {annee}, par exemple « {annee} Numérisation ».")
-        self.base.ecrire("album_non_datees", album_non_datees)
+        if not depuis_cn:
+            self.base.ecrire("album_non_datees", album_non_datees)
         self.base.ecrire("modele_album", modele_album)
         return self.sources()
 
@@ -887,10 +949,12 @@ class Millesime:
         tag = comptes.get(None, {"total": 0, "faites": 0})
         liste = [{**s, "total": (comptes.get(s["cle"]) or {}).get("total", 0), "faites": (comptes.get(s["cle"]) or {}).get("faites") or 0}
                  for s in self.base.tous("SELECT * FROM sources ORDER BY sorte, nom")]
-        sortie = {"tag": {"nom": f"{self.cfg.tag_prefixe}/{self.cfg.tag_non_datee}", "total": tag["total"], "faites": tag["faites"] or 0},
+        sortie = {"tag": {"nom": self.tag_non_datee_complet, "total": tag["total"], "faites": tag["faites"] or 0,
+                          "depuis_chambre_noire": bool(self.noms_chambre_noire())},
                   "sources": liste,
                   "albums": {"non_datees": self.album_non_datees, "modele": self.modele_album,
-                             "depuis_la_stack": not self.base.lire("album_non_datees") and bool(self.cfg.album_non_datees)},
+                             "depuis_la_stack": not self.base.lire("album_non_datees") and bool(self.cfg.album_non_datees),
+                             "depuis_chambre_noire": bool(self.noms_chambre_noire())},
                   "transhumance": bool(self.cfg.jeton_transhumance)}
         if avec_choix:
             pris = {s["cle"] for s in liste}

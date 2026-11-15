@@ -32,6 +32,8 @@
       resume: a?.lu_par?.carnet ? `a lu l'état ${dateCourte(a.lu_par.carnet)}` : 'n\'est jamais venu lire' },
     { cle: 'ha', nom: 'Home Assistant', ok: recent(a?.lu_par?.ha, 2),
       resume: !a?.lu_par?.ha_ouvert ? 'adresse fermée (pas de jeton)' : a?.lu_par?.ha ? `a lu l'état ${dateCourte(a.lu_par.ha)}` : 'n\'est jamais venu lire' },
+    { cle: 'chambre_noire', nom: 'Chambre noire', ok: !!a?.chambre_noire?.noms && !a?.chambre_noire?.erreur,
+      resume: !a?.chambre_noire?.relie ? 'non reliée (pas de jeton)' : a.chambre_noire.erreur ? 'ne répond pas' : a.chambre_noire.noms ? `noms lus ${dateCourte(a.chambre_noire.noms.le)}` : 'jamais lue' },
   ])
 </script>
 
@@ -93,6 +95,27 @@
       {:else if a?.lu_par?.ha}Dernière lecture : {dateCourte(a.lu_par.ha)}.
       {:else}Home Assistant n'est encore jamais venu lire (package <code>systeme/millesime.yaml</code>).{/if}
     </p>
+  </section>
+{:else if choisi === 'chambre_noire'}
+  <section class="surface mt-4 p-4" aria-label="Chambre noire">
+    <h2 class="text-lg font-semibold">Chambre noire</h2>
+    <p class="secondaire mt-1 text-sm">Chambre noire envoie les photos numérisées dans Immich. À chaque relecture d'Immich, Millésime y lit le libellé,
+      le tag et l'album des non datées réglés dans ses Réglages, et les suit. Millésime n'écrit rien dans Chambre noire.</p>
+    {#if !a?.chambre_noire?.relie}
+      <p class="mt-3 text-sm">Non reliée : pose <code>MILLESIME_JETON_CHAMBRE_NOIRE</code> dans la stack (même valeur que <code>CHAMBRE_NOIRE_JETON_MILLESIME</code>).
+        En attendant, les noms viennent de la stack et de <a class="lien" href="#reglages">Réglages</a>.</p>
+    {:else}
+      {#if a.chambre_noire.noms}
+        <dl class="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[10rem_1fr]">
+          <dt class="secondaire">Tag des non datées</dt><dd>{a.chambre_noire.noms.tag_non_datee}</dd>
+          <dt class="secondaire">Album des non datées</dt><dd>{a.chambre_noire.noms.album_non_datees}</dd>
+          <dt class="secondaire">Lu</dt><dd>{dateCourte(a.chambre_noire.noms.le)}</dd>
+        </dl>
+      {/if}
+      {#if a.chambre_noire.erreur}<p class="mt-3 text-sm text-alerte" role="alert">Dernière lecture ratée ({dateCourte(a.chambre_noire.erreur.le)}) : {a.chambre_noire.erreur.detail}.
+        {a.chambre_noire.noms ? 'Les derniers noms lus restent en usage.' : ''}</p>{/if}
+      <p class="mt-3"><button class="bouton" onclick={synchroniser} disabled={synchro}>{synchro ? 'Lecture…' : 'Relire maintenant'}</button></p>
+    {/if}
   </section>
 {/if}
 

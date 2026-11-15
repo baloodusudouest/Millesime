@@ -120,7 +120,7 @@ def test_20_connexion_par_service_et_reglages(page):
     aller(page, "Connexion")
     services = page.locator("nav[aria-label='Services'] .tuile")
     services.first.wait_for()
-    assert services.locator(".nom-tuile").all_inner_texts() == ["Immich", "Calculateur du PC", "carnet", "Home Assistant"]
+    assert services.locator(".nom-tuile").all_inner_texts() == ["Immich", "Calculateur du PC", "carnet", "Home Assistant", "Chambre noire"]
     services.filter(has_text="Home Assistant").click()
     page.get_by_role("region", name="Home Assistant").wait_for()
     services.filter(has_text="Immich").click()

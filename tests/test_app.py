@@ -632,11 +632,11 @@ def test_220_dates_dans_les_noms():
 def test_220_noms_d_albums_regles_dans_l_appli(env):
     client, E = env
     cible, s = _pret_a_dater(client, E)
-    assert client.get("/api/sources").json()["albums"] == {"non_datees": "Non datées Numérisation", "modele": "{annee} Numérisation", "depuis_la_stack": True}
+    assert client.get("/api/sources").json()["albums"] == {"non_datees": "Non datées Numérisation", "modele": "{annee} Numérisation", "depuis_la_stack": True, "depuis_chambre_noire": False}
     assert client.post("/api/reglages/albums", json={"non_datees": "Non datées Numérisation", "modele": "Sans année"}).status_code == 400
     assert client.post("/api/reglages/albums", json={"non_datees": "", "modele": "{annee} X"}).status_code == 400
     r = client.post("/api/reglages/albums", json={"non_datees": "Non datées Numérisation", "modele": "Scans de {annee}"}).json()
-    assert r["albums"] == {"non_datees": "Non datées Numérisation", "modele": "Scans de {annee}", "depuis_la_stack": False}
+    assert r["albums"] == {"non_datees": "Non datées Numérisation", "modele": "Scans de {annee}", "depuis_la_stack": False, "depuis_chambre_noire": False}
     r = client.post(f"/api/scans/{cible}/valider", json={"annee": s["annee_proposee"], "marge": s["marge"]}).json()
     assert r["album"] == f"Scans de {s['annee_proposee']}" and cible not in E["albums"]["al-nd"]["assets"]
     # Sans variable dans la stack ni réglage : valider un scan tagué est refusé net, avant toute écriture
@@ -857,3 +857,74 @@ def test_280_home_assistant(env):
     client.get("/api/etat", headers={"Authorization": f"Bearer {JK}"})
     lu = client.get("/api/accueil").json()["lu_par"]
     assert lu["ha"] and lu["carnet"] and lu["ha_ouvert"] is True
+
+
+def test_290_noms_lus_dans_chambre_noire(env, monkeypatch):
+    """2.9.0 : relié à Chambre noire, Millésime suit son libellé, son tag et son album des non datées ;
+    s'il ne répond plus, les derniers noms lus restent en usage ; Chambre noire passe devant les Réglages."""
+    import requests
+    client, E = env
+    connecter(client)
+    from app import main
+    m = main.m()
+    lectures = []
+
+    class Reponse:
+        status_code = 200
+        corps = {"regle": True, "libelle": "Numérisation", "album_non_datees": "Sans date (CN)",
+                 "tag_non_datee": "Numérisation/Non datée"}
+        def json(self):
+            return self.corps
+    vrai_get = requests.get
+
+    def faux_get(url, **kw):
+        if "/externe/noms" not in url:
+            return vrai_get(url, **kw)
+        lectures.append((url, kw["headers"]["Authorization"]))
+        if Reponse.status_code == 0:
+            raise requests.ConnectionError("hors ligne")
+        return Reponse()
+    monkeypatch.setattr(requests, "get", faux_get)
+    # Non relié : rien n'est lu, noms de la stack
+    client.post("/api/synchroniser")
+    assert lectures == [] and m.album_non_datees == "Non datées Numérisation"
+    assert client.get("/api/accueil").json()["chambre_noire"]["relie"] is False
+    m.cfg.jeton_chambre_noire = "jeton-cn"
+    r = client.post("/api/synchroniser")
+    assert r.status_code == 200
+    assert lectures == [("http://chambre-noire:8100/externe/noms", "Bearer jeton-cn")]
+    assert m.album_non_datees == "Sans date (CN)" and m.tag_non_datee_complet == "Numérisation/Non datée"
+    src = client.get("/api/sources").json()
+    assert src["albums"]["depuis_chambre_noire"] and src["albums"]["non_datees"] == "Sans date (CN)"
+    # Les Réglages ne changent plus que le modèle d'album
+    client.post("/api/reglages/albums", json={"non_datees": "Autre", "modele": "{annee} Scans"})
+    assert m.album_non_datees == "Sans date (CN)" and m.modele_album == "{annee} Scans"
+    # Chambre noire hors ligne : derniers noms gardés, erreur montrée
+    Reponse.status_code = 0
+    client.post("/api/synchroniser")
+    cn = client.get("/api/accueil").json()["chambre_noire"]
+    assert cn["noms"]["album_non_datees"] == "Sans date (CN)" and "ne répond pas" in cn["erreur"]["detail"]
+    # Nouveau libellé sans tag dans Immich : la synchro s'arrête sans rien vider
+    Reponse.status_code = 200
+    Reponse.corps = {**Reponse.corps, "libelle": "Autre lot", "tag_non_datee": "Autre lot/Non datée"}
+    avant = len(client.get("/api/scans?statut=a_analyser").json())
+    r = client.post("/api/synchroniser")
+    assert r.status_code == 400 and "Autre lot/Non datée" in r.json()["detail"] and "Chambre noire" in r.json()["detail"]
+    assert len(client.get("/api/scans?statut=a_analyser").json()) == avant
+    # Jeton refusé
+    Reponse.status_code = 401
+    client.post("/api/synchroniser")
+    assert "jeton refusé" in client.get("/api/accueil").json()["chambre_noire"]["erreur"]["detail"]
+
+
+def test_290_prefixe_facultatif_si_chambre_noire(monkeypatch, tmp_path):
+    from app.config import Config
+    monkeypatch.setenv("MILLESIME_PASSWORD", MDP)
+    monkeypatch.setenv("MILLESIME_IMMICH_CLE", "x")
+    monkeypatch.setenv("MILLESIME_ETAT", str(tmp_path))
+    monkeypatch.delenv("MILLESIME_TAG_PREFIXE", raising=False)
+    monkeypatch.delenv("MILLESIME_JETON_CHAMBRE_NOIRE", raising=False)
+    with pytest.raises(RuntimeError):
+        Config.depuis_env()
+    monkeypatch.setenv("MILLESIME_JETON_CHAMBRE_NOIRE", "j")
+    assert Config.depuis_env().tag_prefixe == ""

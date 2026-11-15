@@ -51,6 +51,7 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
       - MILLESIME_ALBUM_NON_DATEES=${MILLESIME_ALBUM_NON_DATEES:-}   # facultatif depuis la 2.2 : se règle dans l'appli
       - MILLESIME_MODELE_ALBUM=${MILLESIME_MODELE_ALBUM:-}           # facultatif depuis la 2.2 : se règle dans l'appli
       - MILLESIME_JETON_TRANSHUMANCE=${MILLESIME_TRANSHUMANCE_JETON:-}   # 2.2 : le même que TRANSHUMANCE_JETON_MILLESIME ; vide : pas de demande
+      - MILLESIME_JETON_CHAMBRE_NOIRE=${MILLESIME_CHAMBRE_NOIRE_JETON:-} # 2.9 : le même que CHAMBRE_NOIRE_JETON_MILLESIME ; vide : noms de la stack et des Réglages
     ports:
       - "${PORT_MILLESIME:-8098}:8098"
     volumes:

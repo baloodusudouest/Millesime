@@ -2,6 +2,12 @@
 
 
 
+## 2.9.0 — 15 novembre 2026
+- **Noms lus dans Chambre noire.** Relié par un jeton (`MILLESIME_JETON_CHAMBRE_NOIRE`, le même que `CHAMBRE_NOIRE_JETON_MILLESIME`), Millésime lit à chaque relecture d'Immich (`GET /externe/noms` de Chambre noire) le libellé, le tag et l'album des non datées réglés dans Chambre noire (Réglages › Noms dans Immich) et les suit : un seul réglage, côté Chambre noire. Ils passent devant la stack et les Réglages (l'album des non datés n'y est plus modifiable ; l'album par année, si). Chambre noire injoignable : les derniers noms lus restent en usage et l'erreur est montrée. Nouveau libellé sans tag encore dans Immich : la relecture s'arrête sans rien vider, comme avant. Millésime n'écrit rien dans Chambre noire.
+- `MILLESIME_TAG_PREFIXE` devient facultatif quand Chambre noire est reliée.
+- **Connexion : tuile Chambre noire** (noms lus, dernière lecture, erreur, « Relire maintenant »).
+- Tests : 62 réussis. Jamais essayé sur la vraie installation.
+
 ## 2.8.0 — 15 novembre 2026
 - **Home Assistant.** Nouvelle adresse `GET /ha/etat`, avec son propre jeton (`MILLESIME_JETON_HA`, vide : adresse fermée) : photos à dater, à trancher, à nommer, visages à analyser et état du PC, en nombres seulement, jamais un nom. Le package Home Assistant `systeme/millesime.yaml` s'en sert pour les capteurs et pour te rappeler d'allumer le PC quand au moins 20 visages attendent depuis une heure. L'ancienne adresse `/api/ha/etat` (« à venir ») est retirée.
 - **Connexion : tuile Home Assistant**, et la tuile carnet dit quand carnet est venu lire pour la dernière fois (voyant éteint après 48 h sans lecture).

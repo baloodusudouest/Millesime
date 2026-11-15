@@ -34,6 +34,9 @@ class Config:
     transhumance_url: str = "http://transhumance:8097"
     jeton_ha: str = ""            # 2.8.0 : jeton de Home Assistant (/ha/etat) ; vide : adresse fermée
     jeton_transhumance: str = ""    # le même que TRANSHUMANCE_JETON_MILLESIME ; vide : aucune demande n'est envoyée
+    # 2.9.0 : noms des non datées lus dans Chambre noire (/externe/noms) ; jeton vide : noms de la stack et des Réglages
+    chambre_noire_url: str = "http://chambre-noire:8100"
+    jeton_chambre_noire: str = ""   # le même que CHAMBRE_NOIRE_JETON_MILLESIME
 
     @classmethod
     def depuis_env(cls) -> "Config":
@@ -49,7 +52,8 @@ class Config:
         # 2.2.0 : seul le préfixe des tags reste obligatoire dans la stack. Les deux noms d'albums se règlent
         # dans l'appli (Réglages) ; les variables, si elles sont là, en donnent la valeur de départ.
         noms = {v: _env(v) for v in ("MILLESIME_TAG_PREFIXE", "MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM")}
-        if not noms["MILLESIME_TAG_PREFIXE"]:
+        # 2.9.0 : relié à Chambre noire, Millésime y lit le libellé : le préfixe de la stack devient facultatif.
+        if not noms["MILLESIME_TAG_PREFIXE"] and not _env("MILLESIME_JETON_CHAMBRE_NOIRE"):
             raise RuntimeError("Variable(s) absente(s) : MILLESIME_TAG_PREFIXE. À définir dans la stack avec le nom "
                                "réel du préfixe des tags de numérisation dans Immich (voir le README).")
         if noms["MILLESIME_MODELE_ALBUM"] and "{annee}" not in noms["MILLESIME_MODELE_ALBUM"]:
@@ -76,4 +80,6 @@ class Config:
             transhumance_url=_env("MILLESIME_TRANSHUMANCE_URL", "http://transhumance:8097").rstrip("/"),
             jeton_ha=_env("MILLESIME_JETON_HA"),
             jeton_transhumance=_env("MILLESIME_JETON_TRANSHUMANCE"),
+            chambre_noire_url=_env("MILLESIME_CHAMBRE_NOIRE_URL", "http://chambre-noire:8100").rstrip("/"),
+            jeton_chambre_noire=_env("MILLESIME_JETON_CHAMBRE_NOIRE"),
         )

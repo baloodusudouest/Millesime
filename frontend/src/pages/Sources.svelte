@@ -117,9 +117,10 @@
   <section class="surface mt-4 p-4" aria-labelledby="titre-albums">
     <h2 id="titre-albums" class="text-lg font-semibold">Albums des scans tagués</h2>
     <p class="secondaire mt-1 text-sm">Un scan tagué quitte l'album des non datés pour l'album de son année quand tu le valides.
-      {d.albums.depuis_la_stack ? 'Ces deux noms viennent pour l\'instant des variables de la stack ; enregistrés ici, ils passent devant.' : 'Réglés ici ; les variables de la stack ne servent plus.'}</p>
+      {d.albums.depuis_chambre_noire ? 'L\'album des non datés vient de Chambre noire (Réglages › Noms dans Immich) : il se change là-bas. Seul l\'album par année se règle ici.'
+        : d.albums.depuis_la_stack ? 'Ces deux noms viennent pour l\'instant des variables de la stack ; enregistrés ici, ils passent devant.' : 'Réglés ici ; les variables de la stack ne servent plus.'}</p>
     <form class="mt-3 grid gap-3 sm:grid-cols-2" onsubmit={(e) => { e.preventDefault(); faire(() => api.post('/api/reglages/albums', { non_datees: nonDatees, modele }), 'Noms d\'albums enregistrés.') }}>
-      <label class="grid gap-1 text-sm"><span>Album des scans non datés</span><input class="champ" bind:value={nonDatees} /></label>
+      <label class="grid gap-1 text-sm"><span>Album des scans non datés</span><input class="champ" bind:value={nonDatees} disabled={d.albums.depuis_chambre_noire} /></label>
       <label class="grid gap-1 text-sm"><span>Album par année (doit contenir {'{annee}'})</span><input class="champ" bind:value={modele} /></label>
       <p class="sm:col-span-2"><button class="bouton" type="submit" disabled={occupe || session.lecture_seule || (nonDatees === d.albums.non_datees && modele === d.albums.modele && !d.albums.depuis_la_stack)}>Enregistrer</button></p>
     </form>

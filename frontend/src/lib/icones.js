@@ -13,6 +13,7 @@ export const ICONES = {
   // services de « Connexion »
   immich: '<rect x="3.5" y="5.5" width="17" height="13.5" rx="2"/><circle cx="9" cy="10.5" r="1.7"/><path d="m4.5 17.5 4.6-4.4 3.2 3 2.6-2.4 4.6 4.3"/>',
   pc: '<rect x="3.5" y="4.5" width="17" height="11.5" rx="1.8"/><path d="M9 19.5h6M12 16v3.5"/>',
+  chambre_noire: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.2"/>',
   ha: '<path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>',
   carnet: '<rect x="5.5" y="3.5" width="13" height="17" rx="2"/><circle cx="12" cy="10" r="2.2"/><path d="M8.5 16a3.6 3.6 0 0 1 7 0M3.5 8h2M3.5 12h2M3.5 16h2"/>',
 }
