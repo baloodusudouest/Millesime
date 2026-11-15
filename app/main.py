@@ -65,11 +65,15 @@ async def garde(request: Request, appel):
     elif chemin == "/api/etat":
         if not jeton_valide(request.headers.get("authorization"), m().cfg.jeton_carnet):
             return JSONResponse({"detail": "Jeton carnet manquant ou invalide."}, status_code=401)
-    elif chemin.startswith("/api/") and chemin not in ("/api/connexion", "/api/session", "/api/ha/etat"):
+    elif chemin.startswith("/ha/"):
+        # 2.8.0 : Home Assistant, avec son propre jeton ; jeton vide dans la stack = porte fermée
+        if not jeton_valide(request.headers.get("authorization"), m().cfg.jeton_ha):
+            return JSONResponse({"detail": "Jeton Home Assistant manquant ou invalide."}, status_code=401)
+    elif chemin.startswith("/api/") and chemin not in ("/api/connexion", "/api/session"):
         if not ETAT["sessions"].connecte(request.cookies):
             return JSONResponse({"detail": "Connexion nécessaire."}, status_code=401)
     reponse = await appel(request)
-    if chemin.startswith("/api/") and not chemin.startswith(("/api/apercu/", "/api/visage/", "/api/vignette/")):
+    if chemin.startswith(("/api/", "/ha/")) and not chemin.startswith(("/api/apercu/", "/api/visage/", "/api/vignette/")):
         reponse.headers["Cache-Control"] = "no-store"
     return reponse
 
@@ -365,12 +369,15 @@ def fin_calcul(corps: dict = Body(default={})):
 # -- autres applis ---------------------------------------------------------------
 @app.get("/api/etat")
 def etat():
+    m().base.ecrire("carnet_vu", {"le": time.strftime("%Y-%m-%dT%H:%M:%S")})
     return m().etat()
 
 
-@app.get("/api/ha/etat")
+@app.get("/ha/etat")
 def ha_etat():
-    return JSONResponse({"detail": "Intégration Home Assistant à venir."}, status_code=501)
+    """Home Assistant (package systeme/millesime.yaml) : nombres et état du PC, aucun nom."""
+    m().base.ecrire("ha_vu", {"le": time.strftime("%Y-%m-%dT%H:%M:%S")})
+    return m().etat_ha()
 
 
 # -- interface -------------------------------------------------------------------

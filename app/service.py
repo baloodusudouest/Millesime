@@ -559,6 +559,9 @@ class Millesime:
                 "taches": self.compter_taches(), "calibrage": cal,
                 "derniere_synchro": self.base.lire("derniere_synchro"),
                 "pc": self.etat_pc(),
+                "lu_par": {"carnet": (self.base.lire("carnet_vu") or {}).get("le"),
+                           "ha": (self.base.lire("ha_vu") or {}).get("le"),
+                           "ha_ouvert": bool(self.cfg.jeton_ha)},
                 "dernier_calcul": self.base.lire("dernier_calcul")}
 
     def datables(self) -> list[dict]:
@@ -1204,6 +1207,15 @@ class Millesime:
         return contenu
 
     # ------------------------------------------------------------------ état (carnet)
+    def etat_ha(self) -> dict:
+        """Pour Home Assistant : des nombres et l'état du calculateur, jamais un nom de personne."""
+        a = self.accueil()["compteurs"]
+        pc = self.etat_pc()
+        return {"a_dater": a["a_dater"], "a_trancher": a["a_trancher"], "a_nommer": a["a_nommer"],
+                "validees": a["validees"], "total": a["total"], "sans_naissance": len(self.sans_naissance()),
+                "a_analyser": pc["restants"], "pc": pc["etat"], "pc_pourcentage": pc.get("pourcentage"),
+                "pc_reste_min": pc.get("reste_min"), "pc_dernier_contact": pc.get("le")}
+
     def etat(self) -> dict:
         a = self.accueil()["compteurs"]
         t = self.compter_taches()

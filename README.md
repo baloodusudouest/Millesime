@@ -46,6 +46,7 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
       - MILLESIME_IMMICH_CLE=${MILLESIME_IMMICH_CLE}
       - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
       - MILLESIME_JETON_CARNET=${MILLESIME_JETON_CARNET}
+      - MILLESIME_JETON_HA=${MILLESIME_JETON_HA:-}       # 2.8 : jeton de Home Assistant (/ha/etat) ; vide : adresse fermée
       - MILLESIME_TAG_PREFIXE=${MILLESIME_TAG_PREFIXE}
       - MILLESIME_ALBUM_NON_DATEES=${MILLESIME_ALBUM_NON_DATEES:-}   # facultatif depuis la 2.2 : se règle dans l'appli
       - MILLESIME_MODELE_ALBUM=${MILLESIME_MODELE_ALBUM:-}           # facultatif depuis la 2.2 : se règle dans l'appli
@@ -67,6 +68,7 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 | `MILLESIME_IMMICH_CLE` | — | Clé API Immich dédiée |
 | `MILLESIME_JETON_CALCUL` | — | Jeton partagé avec le calculateur du PC |
 | `MILLESIME_JETON_CARNET` | — | Jeton de `GET /api/etat`, lu par carnet |
+| `MILLESIME_JETON_HA` | vide | Jeton de `GET /ha/etat`, lu par Home Assistant ; vide : adresse fermée (2.8) |
 | `MILLESIME_SYNCHRO_MINUTES` | `60` | Fréquence de relecture d'Immich |
 | `MILLESIME_LECTURE_SEULE` | — | `oui` : rien n'est écrit dans Immich (premier jour d'une mise en service) |
 | `MILLESIME_SEUIL_DOUTE` | `4` | Marge (en années) au-delà de laquelle la photo va dans « À trancher » |
@@ -111,6 +113,7 @@ L'Accueil et l'écran « Calcul sur le PC » montrent en direct l’état du PC 
 ### API pour les autres applis
 
 - `GET /api/etat` (Bearer `MILLESIME_JETON_CARNET`) renvoie `a_analyser`, `a_dater`, `a_trancher`, `a_nommer`, `validees`, `sans_naissance` (personnes nommées sans date de naissance) et `message` (« allume le PC… »).
+- `GET /ha/etat` (Bearer `MILLESIME_JETON_HA`, 2.8) renvoie des nombres seulement : `a_dater`, `a_trancher`, `a_nommer`, `validees`, `total`, `sans_naissance` (un nombre), `a_analyser`, `pc` (`jamais_vu`, `indisponible`, `disponible`, `en_attente`, `en_cours`), `pc_pourcentage`, `pc_reste_min`, `pc_dernier_contact`.
 - `GET /api/ha/etat` est réservé à l'intégration Home Assistant, à venir (501).
 
 ## Test n°2 sur le PC (MiVOLO + vision locale)

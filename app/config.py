@@ -32,6 +32,7 @@ class Config:
     lecture_seule: bool = False     # 1.6.0 : aucune écriture dans Immich
     # 2.2.0 : demande de passage envoyée à Transhumance quand un dossier choisi est entièrement daté
     transhumance_url: str = "http://transhumance:8097"
+    jeton_ha: str = ""            # 2.8.0 : jeton de Home Assistant (/ha/etat) ; vide : adresse fermée
     jeton_transhumance: str = ""    # le même que TRANSHUMANCE_JETON_MILLESIME ; vide : aucune demande n'est envoyée
 
     @classmethod
@@ -73,5 +74,6 @@ class Config:
             immich_lien=_env("MILLESIME_IMMICH_LIEN").rstrip("/"),
             lecture_seule=_env("MILLESIME_LECTURE_SEULE").lower() in ("oui", "1", "true", "yes"),
             transhumance_url=_env("MILLESIME_TRANSHUMANCE_URL", "http://transhumance:8097").rstrip("/"),
+            jeton_ha=_env("MILLESIME_JETON_HA"),
             jeton_transhumance=_env("MILLESIME_JETON_TRANSHUMANCE"),
         )

@@ -2,26 +2,22 @@
 
 Fichier à lire en premier dans une nouvelle session, et à mettre à jour à chaque fin de session, dans le même commit que le code.
 
-## État (11/11/2026)
+## État (15/11/2026)
 
-- **2.5.0 (13/11/2026)** : `date_d_un_nom` (mois en lettres, année 4 chiffres, fourchette ≤ 20 ans, lots ignorés par `_LOT`), `date_du_dossier`, `_dates_des_albums` (albums dont le titre porte une date, lus à chaque synchro), colonne `date_nom_source` ; `datables()`, `dater_par_nom(lot, n)`, `annuler_lot(lot)` ; routes `POST /api/datables/dater`, `POST /api/lots/{lot}/annuler`, `GET /api/scans?statut=datables`. Une fourchette est proposée en année du milieu ± demi-écart.
-- **2.4.0 (13/11/2026)** : `date_du_dossier` / `jour_du_dossier` (service.py), colonne `scans.date_dossier` ; `estimation.proposer` met « à dater » une photo sans visage utile mais à dossier daté ; `garder_date(…, "dossier")`. Synchro légère : colonnes `maj_immich` (updatedAt d'Immich) et `visages_lus_le`, tour horaire par empreinte md5 de l'id, `_rafraichir_personnes` (une lecture de /people avec les masquées) ; `POST /api/synchroniser` = complète. À vérifier : Immich change-t-il `updatedAt` d'une photo quand on y rattache un visage ? Sinon le changement attend le tour de la photo (24 h au plus) ou « Relire la photo ».
-- **2.3.0 (13/11/2026)** : colonne `scans.chemin` (originalPath, rempli à la synchro), `liste()` rend `chemin` et `noms` ; filtres côté écran dans `Dater.svelte` (arbre des dossiers, niveaux communs sautés). `detacher_visage` : Immich ne laisse pas un visage sans personne, il passe dans une personne neuve sans nom (`POST /people` puis `PUT /faces/{personne}`), journal « detacher », annulation par réattribution.
-- **2.2.1** (13/11/2026) : toujours sombre (blocs `prefers-color-scheme: light` retirés, variante `dark:` partout).
-- **2.2.0** (13/11/2026) : sources choisies dans l'appli (table `sources`, colonne `scans.source`, `Millesime.sources/ajouter_sources/retirer_source`, `pages/Sources.svelte`) ; date déjà là comparée à l'estimation (`dates_connues`, `_comparer`, `garder_date`, colonnes `date_connue`/`date_nom`) ; demande à Transhumance (`demander_passage`) ; noms d'albums réglables (`regler_albums`). **Jamais essayé sur la vraie installation. À vérifier en premier : les adresses `/view/folder/unique-paths` et `/view/folder?path=` et le filtre `albumIds` de la recherche, écrits de mémoire de l'API d'Immich ; et le droit que la clé doit avoir pour les dossiers.** Pour un dossier de la bibliothèque externe, Immich écrit la date dans un fichier .xmp à côté de l'original : il faut que ce dossier soit inscriptible par Immich.
-- **2.1.0** (13/11/2026) : connexion commune avec l'Anneau — cookie `maison_session` (accepté ; `Sessions.connecte`, `commun_valide` dans `app/auth.py`). Jamais essayée sur la vraie installation.
-- **2.0.0 sur `main`** : format de carnet (habillage lie-de-vin, rail et pilule, quatre entrées, tuiles, Connexion, Réglages). Aucun changement d'API ni d'écriture.
-- 1.6.0 : mode lecture seule, test qui fige les écritures dans Immich, premier test d'écran.
-- 1.5.1 : noms de tags et d'albums obligatoires dans la stack. Historique du dépôt réécrit le même jour (noms de personnes, adresse locale, chemin du NAS retirés).
-- Dossier « tel que construit » et écarts avec carnet : [`docs/dossier.md`](docs/dossier.md). Avis du conseil : [`docs/2.0-conseil.md`](docs/2.0-conseil.md).
-- Décisions de Julien (11/11) : quatre entrées (Dater, À traiter, Connexion, Réglages), couleur lie-de-vin, année en Bodoni gardée, trois livraisons à la suite (1.5.1, 1.6.0, 2.0.0).
+- **2.8.0 (15/11/2026)** : `GET /ha/etat` (jeton `MILLESIME_JETON_HA`, vide = fermé ; `Millesime.etat_ha`, nombres seulement) pour le package HA `systeme/millesime.yaml` ; `/api/ha/etat` retiré. Lectures notées (`carnet_vu`, `ha_vu`, rendues dans `accueil().lu_par`) ; tuile Home Assistant dans Connexion. Jamais essayé sur la vraie installation.
+- **2.7.0 à 2.7.3 (14/11/2026)** : « Datables par le nom » : plusieurs dossiers ou albums cochés d'un coup, chacun à sa date modifiable (1992, 07/1992, 14/07/1992), date proposée en face du dossier, jour précis reconnu dans un nom (« 1985-12-25 », « 9 avril 1988 »).
+- **2.6.0 (13/11)** : Datables en deux colonnes. **2.5.0** : `date_d_un_nom`, `datables()`, `dater_par_nom`, `annuler_lot` (annulation par lot). **2.4.0** : date lue dans le dossier, synchro légère (`maj_immich`, tour horaire, `_rafraichir_personnes`). **2.3.0** : filtres par dossier dans Dater, « ce n'est pas cette personne » (`detacher_visage`). **2.2.x** : sources (albums et dossiers) choisies dans l'appli, date déjà là comparée à l'estimation, demande à Transhumance, noms d'albums dans Réglages ; toujours sombre. **2.1.0** : cookie commun `maison_session`. **2.0.x** : format de carnet (rail et pilule, quatre entrées, tuiles).
+- **1.4 à 1.6 (11/11)** : calculateur du PC en veille avec suivi en direct (`etat_pc`, `pc_passe`), noms de tags obligatoires (1.5.1, historique réécrit), lecture seule et test qui fige les écritures (1.6.0).
+- **Adresses d'Immich vérifiées le 15/11/2026** contre la spécification OpenAPI d'Immich 3.4 (`open-api/immich-openapi-specs.json`) : `/view/folder/unique-paths`, `/view/folder?path=`, le filtre `albumIds` de `/search/metadata`, `PUT /faces/{id}`, `/people/{id}/merge` existent tels qu'écrits. La clé de Millésime doit avoir le droit `folder.read` (en plus de `asset.read/update`, `face.*`, `person.*`, `tag.*`, `album.*`). Jamais appelées sur la vraie installation.
+- Dossier « tel que construit » : [`docs/dossier.md`](docs/dossier.md). Avis du conseil : [`docs/2.0-conseil.md`](docs/2.0-conseil.md).
 
 ## Prochaine étape
 
-1. Julien n'a pas encore déployé la 1.5.1 (trois variables à poser dans Portainer d'abord, `homelab.yml` du projet à renvoyer quand il le demande).
-2. Mise en service de la 2.0.0 : sauvegarde d'Immich avant, un jour en `MILLESIME_LECTURE_SEULE=oui`, puis une validation réelle suivie d'un Annuler. Retour arrière : `MILLESIME_VERSION=1.6.0`.
-3. À juger à l'usage par Julien : le lie-de-vin, la pilule effacée dans Dater sur iPhone, les tuiles.
-4. Plus tard : Home Assistant (capteur « photos à dater », rappel d'allumer le PC).
+1. **Mise en service** (à faire avec Julien, rien n'a encore été essayé sur la vraie installation depuis la 1.5) : sauvegarde d'Immich ; `MILLESIME_LECTURE_SEULE=oui` et `MILLESIME_VERSION=2.8.0` dans Portainer ; vérifier la version dans Réglages ; Sources (albums et dossiers listés ? sinon droit `folder.read` de la clé) ; Datables ; un jour à regarder ; puis lecture seule retirée, une validation réelle et son Annuler.
+2. **Home Assistant** : `MILLESIME_JETON_HA` dans la stack, package `systeme/millesime.yaml` v1.0 (master doc 1.78), deux secrets, redémarrage.
+3. **carnet** (2.21.0) : tuile Millésime dans Connexion et tuile « Sans anniversaire » dans À traiter, par `GET /api/etat` (`CARNET_MILLESIME_URL`, `CARNET_MILLESIME_JETON` = `MILLESIME_JETON_CARNET`).
+4. À vérifier : Immich change-t-il `updatedAt` d'une photo quand on y rattache un visage (sinon attendre le tour de 24 h ou « Relire la photo ») ; le cookie commun avec l'Anneau ; un dossier de la bibliothèque externe doit être inscriptible par Immich (fichier .xmp).
+5. À juger à l'usage par Julien : le lie-de-vin, la pilule effacée dans Dater sur iPhone, les tuiles.
 
 ## Décisions tranchées
 

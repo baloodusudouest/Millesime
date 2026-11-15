@@ -2,6 +2,11 @@
 
 
 
+## 2.8.0 — 15 novembre 2026
+- **Home Assistant.** Nouvelle adresse `GET /ha/etat`, avec son propre jeton (`MILLESIME_JETON_HA`, vide : adresse fermée) : photos à dater, à trancher, à nommer, visages à analyser et état du PC, en nombres seulement, jamais un nom. Le package Home Assistant `systeme/millesime.yaml` s'en sert pour les capteurs et pour te rappeler d'allumer le PC quand au moins 20 visages attendent depuis une heure. L'ancienne adresse `/api/ha/etat` (« à venir ») est retirée.
+- **Connexion : tuile Home Assistant**, et la tuile carnet dit quand carnet est venu lire pour la dernière fois (voyant éteint après 48 h sans lecture).
+- Tests : 60 réussis (serveur, connexion commune, outils de mesure, écrans PC et iPhone).
+
 ## 2.7.3 — 14 novembre 2026
 - **Un jour précis dans le nom est reconnu.** « 1985-12-25 Noël », « 25.12.1985 », « 9 avril 1988 » ou « 1er mai 1990 » donnent ce jour-là, au lieu du 15 du mois. Vaut pour les dossiers et pour les albums ; un album au jour précis passe avant un album au mois ou à l'année. Un jour impossible (30 février) retombe sur le mois. Dans « Datables par le nom », la date proposée et la date écrite affichent ce jour ; dans « Dater », la date du dossier aussi.
 ## 2.7.2 — 14 novembre 2026

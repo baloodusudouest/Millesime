@@ -28,7 +28,7 @@ Utilisateur unique, sur iPhone et sur PC, par le réseau local et Tailscale.
 - **Immich** : clé API dédiée ; lecture des scans, visages et personnes ; écriture de la date, des tags, des albums, des noms et des fusions.
 - **Calculateur du PC** (`pc/`, `mesure/`) : conteneur Docker Desktop qui interroge l'appli (`/api/calcul/*`) avec un jeton partagé.
 - **carnet** : lit `GET /api/etat` avec un jeton.
-- **Home Assistant** : rien ; `GET /api/ha/etat` répond « à venir ».
+- **Home Assistant** : depuis la 2.8.0, lit `GET /ha/etat` (jeton `MILLESIME_JETON_HA`, nombres seulement) toutes les 10 min ; package HA `systeme/millesime.yaml` (capteurs, rappel d'allumer le PC).
 - **Connexion** : mot de passe unique (`MILLESIME_PASSWORD`, la stack lui donne la valeur de `CARNET_PASSWORD`), session par cookie.
 - **Publication** : GitHub Actions lance les tests du back et compile l'interface, puis publie `ghcr.io/baloodusudouest/millesime` (`latest`, version, commit). Watchtower désactivé : mise à jour manuelle dans Portainer.
 - **Tests** : 15 tests de l'appli (faux Immich, faux calculateur), 9 tests des outils de mesure. Aucun test d'écran.

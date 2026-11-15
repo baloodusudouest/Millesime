@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import faux_immich_app as faux  # noqa: E402
 
 MDP = "secret-carnet"
-JC, JK = "jeton-calcul", "jeton-carnet"
+JC, JK, JH = "jeton-calcul", "jeton-carnet", "jeton-ha"
 
 
 def noms_de_test(monkeypatch):
@@ -30,6 +30,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("MILLESIME_PASSWORD", MDP)
     monkeypatch.setenv("MILLESIME_JETON_CALCUL", JC)
     monkeypatch.setenv("MILLESIME_JETON_CARNET", JK)
+    monkeypatch.setenv("MILLESIME_JETON_HA", JH)
     monkeypatch.setenv("MILLESIME_ETAT", str(tmp_path))
     noms_de_test(monkeypatch)
     from app import main
@@ -74,7 +75,6 @@ def test_acces_protege(env):
     assert client.get("/api/etat").status_code == 401
     assert client.post("/api/connexion", json={"mot_de_passe": "non"}).status_code == 401
     assert client.get("/health").status_code == 200
-    assert client.get("/api/ha/etat").status_code == 501
 
 
 def test_parcours_complet(env):
@@ -836,3 +836,24 @@ def test_270_plusieurs_dossiers_dates_choisies(env):
     assert E["assets"]["nd-sans"]["exifInfo"]["dateTimeOriginal"] == "1992-12-24T12:00:00.000Z"      # date tapée
     assert E["assets"]["nd2"]["exifInfo"]["dateTimeOriginal"] == "1987-07-15T12:00:00.000Z"          # date du nom
     assert client.post(f"/api/lots/{r['lot']}/annuler").json()["annulees"] == 2
+
+
+def test_280_home_assistant(env):
+    """2.8.0 : /ha/etat avec son propre jeton, des nombres et l'état du PC, aucun nom ; les lecteurs sont notés."""
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    assert client.get("/ha/etat").status_code == 401
+    assert client.get("/ha/etat", headers={"Authorization": f"Bearer {JK}"}).status_code == 401
+    r = client.get("/ha/etat", headers={"Authorization": f"Bearer {JH}"})
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    e = r.json()
+    assert e["pc"] == "jamais_vu" and e["a_analyser"] > 0 and isinstance(e["sans_naissance"], int)
+    assert set(e) >= {"a_dater", "a_trancher", "a_nommer", "validees", "total", "pc_pourcentage", "pc_reste_min"}
+    texte = r.text
+    for p in E["personnes"].values():
+        if p.get("name"):
+            assert p["name"] not in texte
+    client.get("/api/etat", headers={"Authorization": f"Bearer {JK}"})
+    lu = client.get("/api/accueil").json()["lu_par"]
+    assert lu["ha"] and lu["carnet"] and lu["ha_ouvert"] is True

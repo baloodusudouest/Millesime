@@ -20,13 +20,18 @@
     try { await api.post('/api/synchroniser'); await charger() } catch (e) { erreur = e.message }
     synchro = false
   }
+  // un lecteur est « branché » s'il est venu lire dans les dernières heures
+  const recent = (iso, heures) => !!iso && Date.now() - new Date(iso).getTime() < heures * 3600e3
   const pcActif = $derived(['en_cours', 'en_attente', 'disponible'].includes(pc.etat))
   const services = $derived([
     { cle: 'immich', nom: 'Immich', ok: !!a?.derniere_synchro,
       resume: a?.derniere_synchro ? `relu ${dateCourte(a.derniere_synchro.le)}` : 'jamais relu' },
     { cle: 'pc', nom: 'Calculateur du PC', ok: pcActif,
       resume: pc.etat === 'en_cours' ? `calcul en cours, ${pc.pourcentage} %` : pcActif ? 'prêt' : pc.etat === 'jamais_vu' ? 'jamais lancé' : 'éteint' },
-    { cle: 'carnet', nom: 'carnet', ok: true, resume: 'lit l\'état de Millésime' },
+    { cle: 'carnet', nom: 'carnet', ok: recent(a?.lu_par?.carnet, 48),
+      resume: a?.lu_par?.carnet ? `a lu l'état ${dateCourte(a.lu_par.carnet)}` : 'n\'est jamais venu lire' },
+    { cle: 'ha', nom: 'Home Assistant', ok: recent(a?.lu_par?.ha, 2),
+      resume: !a?.lu_par?.ha_ouvert ? 'adresse fermée (pas de jeton)' : a?.lu_par?.ha ? `a lu l'état ${dateCourte(a.lu_par.ha)}` : 'n\'est jamais venu lire' },
   ])
 </script>
 
@@ -75,6 +80,19 @@
       d'allumer le PC. Millésime n'écrit rien dans carnet. Les dates de naissance qui manquent se complètent dans carnet, qui les envoie à Immich.</p>
     {#if a}<p class="mt-3 text-sm">{pluriel(a.compteurs.sans_naissance, 'personne')} des scans {a.compteurs.sans_naissance > 1 ? 'n\'ont' : 'n\'a'} pas de date de naissance :
       <a class="lien" href="#nommer">voir la liste</a>.</p>{/if}
+    <p class="secondaire mt-3 text-sm">{a?.lu_par?.carnet ? `Dernière lecture : ${dateCourte(a.lu_par.carnet)}.` : 'carnet n\'est encore jamais venu lire.'}</p>
+  </section>
+{:else if choisi === 'ha'}
+  <section class="surface mt-4 p-4" aria-label="Home Assistant">
+    <h2 class="text-lg font-semibold">Home Assistant</h2>
+    <p class="secondaire mt-1 text-sm">Home Assistant lit toutes les 10 minutes les nombres de Millésime (photos à dater, à trancher, visages à analyser)
+      et l'état du PC, jamais un nom. Quand au moins 20 visages attendent depuis une heure et que le PC est éteint, il te rappelle de l'allumer.
+      Millésime n'écrit rien dans Home Assistant.</p>
+    <p class="mt-3 text-sm">
+      {#if !a?.lu_par?.ha_ouvert}Adresse fermée : pose <code>MILLESIME_JETON_HA</code> dans la stack.
+      {:else if a?.lu_par?.ha}Dernière lecture : {dateCourte(a.lu_par.ha)}.
+      {:else}Home Assistant n'est encore jamais venu lire (package <code>systeme/millesime.yaml</code>).{/if}
+    </p>
   </section>
 {/if}
 

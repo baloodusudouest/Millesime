@@ -120,7 +120,9 @@ def test_20_connexion_par_service_et_reglages(page):
     aller(page, "Connexion")
     services = page.locator("nav[aria-label='Services'] .tuile")
     services.first.wait_for()
-    assert services.locator(".nom-tuile").all_inner_texts() == ["Immich", "Calculateur du PC", "carnet"]
+    assert services.locator(".nom-tuile").all_inner_texts() == ["Immich", "Calculateur du PC", "carnet", "Home Assistant"]
+    services.filter(has_text="Home Assistant").click()
+    page.get_by_role("region", name="Home Assistant").wait_for()
     services.filter(has_text="Immich").click()
     page.get_by_role("button", name="Synchroniser maintenant").click()
     page.get_by_role("button", name="Synchroniser maintenant").wait_for()              # revenu après la synchronisation
