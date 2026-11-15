@@ -12,6 +12,8 @@
   let coches = $state(new Set())
   let nonDatees = $state('')
   let modele = $state('')
+  let nouveau = $state('')       // 2.10.0 : libellé ajouté à la main
+  let aRetirer = $state(null)    // libellé dont le retrait attend la confirmation
 
   const MOT = { album: 'Album', dossier: 'Dossier' }
   const plat = (t) => t.toLowerCase().normalize('NFD').replace(/\p{Mn}/gu, '')
@@ -60,11 +62,14 @@
 
   {#if d}
     <ul class="mt-3 grid gap-2" aria-label="Sources">
-      <li class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-filet px-3 py-2">
-        <span class="origine origine-tag">Scan tagué</span>
-        <span class="order-last min-w-0 basis-full break-words sm:order-none sm:basis-0 sm:flex-1">{d.tag.nom}</span>
-        <span class="secondaire ml-auto text-sm">{d.tag.faites} sur {pluriel(d.tag.total, 'photo')} datées</span>
-      </li>
+      {#each d.libelles as l (l.libelle)}
+        <li class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-filet px-3 py-2">
+          <span class="origine origine-tag">Scan tagué</span>
+          <span class="order-last min-w-0 basis-full break-words sm:order-none sm:basis-0 sm:flex-1">{l.tag_non_datee}{l.actuel ? '' : ' (ancien)'}</span>
+          <span class="secondaire ml-auto text-sm">{l.vu_le ? pluriel(l.photos, 'photo') + ' non datée' + (l.photos > 1 ? 's' : '') : 'pas encore dans Immich'}</span>
+        </li>
+      {/each}
+      <li class="secondaire px-3 text-sm">Scans tagués en tout : {d.tag.faites} sur {pluriel(d.tag.total, 'photo')} datées.</li>
       {#each d.sources as s (s.cle)}
         <li class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-filet px-3 py-2">
           <span class="origine origine-{s.sorte}">{MOT[s.sorte]}</span>
@@ -123,6 +128,35 @@
       <label class="grid gap-1 text-sm"><span>Album des scans non datés</span><input class="champ" bind:value={nonDatees} disabled={d.albums.depuis_chambre_noire} /></label>
       <label class="grid gap-1 text-sm"><span>Album par année (doit contenir {'{annee}'})</span><input class="champ" bind:value={modele} /></label>
       <p class="sm:col-span-2"><button class="bouton" type="submit" disabled={occupe || session.lecture_seule || (nonDatees === d.albums.non_datees && modele === d.albums.modele && !d.albums.depuis_la_stack)}>Enregistrer</button></p>
+    </form>
+  </section>
+
+  <section class="surface mt-4 p-4" aria-labelledby="titre-libelles">
+    <h2 id="titre-libelles" class="text-lg font-semibold">Libellés suivis</h2>
+    <p class="secondaire mt-1 text-sm">Millésime relit les tags « Non datée » et « AAAA-MM » de chaque libellé. Le libellé actuel
+      ({d.albums.depuis_chambre_noire ? 'réglé dans Chambre noire' : 'donné par la stack'}) s'ajoute tout seul ; les anciens restent suivis
+      jusqu'à ce que tu les retires. Retirer ne change rien dans Immich : Millésime cesse de lire ce tag, et ses photos pas encore datées
+      quittent la liste à la prochaine relecture.</p>
+    <ul class="mt-3 grid gap-2" aria-label="Libellés suivis">
+      {#each d.libelles as l (l.libelle)}
+        <li class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-filet px-3 py-2">
+          <span class="min-w-0 flex-1 break-words font-medium">{l.libelle}</span>
+          <span class="secondaire text-sm">{l.actuel ? 'actuel' : l.origine === 'manuel' ? 'ajouté ici' : 'ancien'} · album « {l.album_non_datees} »</span>
+          {#if !l.actuel}
+            {#if aRetirer === l.libelle}
+              <button class="bouton" disabled={occupe} onclick={() => { aRetirer = null; faire(() => api.post('/api/libelles/retirer', { libelle: l.libelle }), `« ${l.libelle} » n'est plus suivi.`) }}>Confirmer le retrait</button>
+              <button class="bouton" onclick={() => (aRetirer = null)}>Garder</button>
+            {:else}
+              <button class="bouton" disabled={occupe} onclick={() => (aRetirer = l.libelle)}>Retirer</button>
+            {/if}
+          {/if}
+        </li>
+      {/each}
+    </ul>
+    <form class="mt-3 flex flex-wrap gap-2" onsubmit={(e) => { e.preventDefault(); faire(() => api.post('/api/libelles', { libelle: nouveau }), `« ${nouveau.trim()} » est suivi.`).then(() => { if (!erreur) nouveau = '' }) }}>
+      <label class="sr-only" for="nouveau-libelle">Ajouter un ancien libellé</label>
+      <input id="nouveau-libelle" class="champ min-w-0 flex-1" placeholder="Ajouter un ancien libellé" maxlength="80" bind:value={nouveau} />
+      <button class="bouton" type="submit" disabled={occupe || !nouveau.trim()}>Ajouter</button>
     </form>
   </section>
 {/if}

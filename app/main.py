@@ -258,6 +258,16 @@ def demander_passage(corps: dict = Body(...)):
     return {"message": m().demander_passage(str(corps.get("cle", ""))), **m().sources()}
 
 
+@app.post("/api/libelles")
+def ajouter_libelle(corps: dict = Body(...)):
+    return m().ajouter_libelle(str(corps.get("libelle", "")), str(corps.get("album_non_datees", "")))
+
+
+@app.post("/api/libelles/retirer")
+def retirer_libelle(corps: dict = Body(...)):
+    return m().retirer_libelle(str(corps.get("libelle", "")))
+
+
 @app.post("/api/reglages/albums")
 def regler_albums(corps: dict = Body(...)):
     return m().regler_albums(str(corps.get("non_datees", "")), str(corps.get("modele", "")))

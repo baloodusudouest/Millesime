@@ -474,9 +474,18 @@ def test_151_noms_obligatoires_et_tag_introuvable(env, monkeypatch):
         Config.depuis_env()
     from app import main
     main.m().cfg.tag_prefixe = "Autre nom"
+    # 2.10.0 : l'ancien libellé reste suivi ; le nouveau, jamais trouvé, ne vide rien et n'arrête rien
+    r = client.post("/api/synchroniser")
+    assert r.status_code == 200
+    assert client.get("/api/accueil").json()["compteurs"] == avant
+    lib = {l["libelle"]: l for l in client.get("/api/sources").json()["libelles"]}
+    assert lib["Autre nom"]["actuel"] and lib["Autre nom"]["vu_le"] is None and lib["Numérisation"]["vu_le"]
+    # Seul libellé, jamais trouvé : arrêt sans rien effacer (protection 1.5.1)
+    main.m().base.ecrire("libelles", [])
     r = client.post("/api/synchroniser")
     assert r.status_code == 400 and "introuvable" in r.json()["detail"]
     assert client.get("/api/accueil").json()["compteurs"] == avant
+    main.m().base.ecrire("libelles", [])
     main.m().cfg.tag_prefixe = "Numérisation"
 
 
@@ -909,8 +918,11 @@ def test_290_noms_lus_dans_chambre_noire(env, monkeypatch):
     Reponse.corps = {**Reponse.corps, "libelle": "Autre lot", "tag_non_datee": "Autre lot/Non datée"}
     avant = len(client.get("/api/scans?statut=a_analyser").json())
     r = client.post("/api/synchroniser")
-    assert r.status_code == 400 and "Autre lot/Non datée" in r.json()["detail"] and "Chambre noire" in r.json()["detail"]
+    assert r.status_code == 200                                   # 2.10.0 : l'ancien libellé reste suivi
     assert len(client.get("/api/scans?statut=a_analyser").json()) == avant
+    lib = {l["libelle"]: l for l in client.get("/api/sources").json()["libelles"]}
+    assert set(lib) == {"Numérisation", "Autre lot"} and lib["Autre lot"]["actuel"] and lib["Autre lot"]["origine"] == "chambre_noire"
+    assert "Sans date (CN)" in m.albums_non_datees()       # album des non datées de l'ancien libellé, toujours reconnu
     # Jeton refusé
     Reponse.status_code = 401
     client.post("/api/synchroniser")
@@ -928,3 +940,35 @@ def test_290_prefixe_facultatif_si_chambre_noire(monkeypatch, tmp_path):
         Config.depuis_env()
     monkeypatch.setenv("MILLESIME_JETON_CHAMBRE_NOIRE", "j")
     assert Config.depuis_env().tag_prefixe == ""
+
+
+def test_2100_libelles_suivis(env):
+    """2.10.0 : anciens libellés gardés et relus ; ajout et retrait dans Réglages ; l'actuel ne se retire pas ;
+    un tag déjà vu qui disparaît d'Immich arrête la synchro sans rien vider."""
+    client, E = env
+    connecter(client)
+    from app import main
+    m = main.m()
+    client.post("/api/synchroniser")
+    total = client.get("/api/accueil").json()["compteurs"]["total"]
+    lib = client.get("/api/sources").json()["libelles"]
+    assert [(l["libelle"], l["actuel"], l["origine"]) for l in lib] == [("Numérisation", True, "stack")] and lib[0]["photos"] > 0
+    assert client.post("/api/libelles", json={"libelle": "A/B"}).status_code == 400
+    r = client.post("/api/libelles", json={"libelle": "Vieux lot"})
+    assert r.status_code == 200 and [l["libelle"] for l in r.json()["libelles"]] == ["Numérisation", "Vieux lot"]
+    assert client.post("/api/libelles", json={"libelle": "Vieux lot"}).status_code == 400
+    assert "Non datées Vieux lot" in m.albums_non_datees()
+    assert client.post("/api/synchroniser").status_code == 200          # jamais trouvé : rien n'arrête
+    assert client.post("/api/libelles/retirer", json={"libelle": "Numérisation"}).status_code == 400   # l'actuel
+    # Un libellé déjà vu dont le tag disparaît : arrêt, rien n'est vidé, conseil de le retirer
+    liste = m.base.lire("libelles")
+    for l in liste:
+        if l["libelle"] == "Vieux lot":
+            l["vu_le"] = "2026-11-01T10:00:00"
+    m.base.ecrire("libelles", liste)
+    r = client.post("/api/synchroniser")
+    assert r.status_code == 400 and "Vieux lot/Non datée" in r.json()["detail"] and "retire" in r.json()["detail"]
+    assert client.get("/api/accueil").json()["compteurs"]["total"] == total
+    r = client.post("/api/libelles/retirer", json={"libelle": "Vieux lot"})
+    assert [l["libelle"] for l in r.json()["libelles"]] == ["Numérisation"]
+    assert client.post("/api/synchroniser").status_code == 200

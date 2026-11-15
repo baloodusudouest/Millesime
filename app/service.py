@@ -213,21 +213,30 @@ class Millesime:
             if not self.tag_prefixe:
                 raise ErreurMillesime("Libellé des numérisations inconnu : Chambre noire n'a pas encore répondu et "
                                       "MILLESIME_TAG_PREFIXE est vide. Rien n'a été modifié.")
-            pref = self.tag_prefixe + "/"
             tags = self.immich.tags()
-            nom_nd = self.tag_non_datee_complet
-            non_datee = next((t for t in tags if (t.get("value") or "") == nom_nd), None)
-            if not non_datee:
-                # 1.5.1 : un nom mal saisi dans la stack ne doit pas vider la liste des scans en silence
+            par_valeur = {(t.get("value") or ""): t for t in tags}
+            # 2.10.0 : tous les libellés suivis (l'actuel et les anciens) sont relus.
+            suivis = self.libelles()
+            trouves = [l for l in suivis if l["tag_non_datee"] in par_valeur]
+            perdus = [l for l in suivis if l["tag_non_datee"] not in par_valeur and l.get("vu_le")]
+            if perdus or not trouves:
+                # 1.5.1 : un nom mal saisi, ou un tag disparu d'Immich, ne doit pas vider la liste des scans en silence.
+                # Un libellé jamais trouvé (nouveau, aucun envoi encore) n'arrête rien tant qu'un autre est trouvé.
+                manquant = (perdus or suivis)[0]["tag_non_datee"]
                 origine = ("le libellé réglé dans Chambre noire (aucun envoi de non datées encore fait ?)" if self.noms_chambre_noire()
                            else "MILLESIME_TAG_PREFIXE et MILLESIME_TAG_NON_DATEE dans la stack")
-                raise ErreurMillesime(f"Le tag « {nom_nd} » est introuvable dans Immich : vérifie {origine}. Rien n'a été modifié.")
+                conseil = ("S'il a été supprimé ou renommé exprès, retire ce libellé dans Réglages › Libellés suivis."
+                           if perdus else f"Vérifie {origine}.")
+                raise ErreurMillesime(f"Le tag « {manquant} » est introuvable dans Immich. {conseil} Rien n'a été modifié.")
+            non_datees = [par_valeur[l["tag_non_datee"]] for l in trouves]
             dates = []
-            for t in tags:
-                v = t.get("value") or ""
-                m = re.fullmatch(re.escape(pref) + r"(\d{4})-(\d{2})(?:-(\d{2}))?", v)
-                if m:
-                    dates.append((t, f"{m.group(1)}-{m.group(2)}-{m.group(3) or '15'}"))
+            for l in suivis:
+                pref = l["libelle"] + "/"
+                for t in tags:
+                    v = t.get("value") or ""
+                    m = re.fullmatch(re.escape(pref) + r"(\d{4})-(\d{2})(?:-(\d{2}))?", v)
+                    if m:
+                        dates.append((t, f"{m.group(1)}-{m.group(2)}-{m.group(3) or '15'}"))
             estimees = set()
             for t in tags:
                 if (t.get("value") or "").startswith(self.cfg.tag_estimee + "/"):
@@ -235,8 +244,11 @@ class Millesime:
 
             vus = set()
             maj: dict[str, str] = {}                     # 2.4.0 : dernière modification de chaque photo dans Immich
-            if non_datee:
-                for a in self.immich.rechercher({"tagIds": [non_datee["id"]]}):
+            comptes: dict[str, int] = {}
+            for non_datee in non_datees:
+                photos_nd = self.immich.rechercher({"tagIds": [non_datee["id"]]})
+                comptes[non_datee.get("value") or ""] = len(photos_nd)
+                for a in photos_nd:
                     vus.add(a["id"])
                     maj[a["id"]] = a.get("updatedAt") or ""
                     envoi = est.parse_date(a.get("createdAt") or a.get("fileCreatedAt"))
@@ -269,6 +281,7 @@ class Millesime:
                                            chemin=a.get("originalPath"))
                     connue, du_nom = dates_connues(a, a["id"] in estimees)
                     self.base.executer("UPDATE scans SET date_connue=?, date_nom=? WHERE asset_id=?", connue, du_nom, a["id"])
+            self._noter_libelles_trouves(comptes)
             # scans disparus d'Immich (ou retagués) : retirés
             for r in self.base.tous("SELECT asset_id FROM scans"):
                 if r["asset_id"] not in vus:
@@ -831,7 +844,7 @@ class Millesime:
             if not s.get("source"):
                 # Un scan tagué quitte l'album des non datées pour celui de son année.
                 # Une photo d'un album ou d'un dossier choisi reste où elle est (2.2.0) : date et tag seulement.
-                nd = next((al for al in albums_avant if al["nom"] == self.album_non_datees), None)
+                nd = next((al for al in albums_avant if al["nom"] in self.albums_non_datees()), None)
                 if nd:
                     self.immich.retirer_album(nd["id"], [asset_id])
                 album = self._album_par_nom(apres["album"])
@@ -904,6 +917,62 @@ class Millesime:
         cn = self.noms_chambre_noire()
         return cn["tag_non_datee"] if cn else f"{self.cfg.tag_prefixe}/{self.cfg.tag_non_datee}"
 
+    # ------------------------------------------------------------------ libellés suivis (2.10.0)
+    def libelles(self) -> list[dict]:
+        """Libellés relus à chaque synchro : l'actuel (Chambre noire ou stack), ajouté de lui-même et mis à jour,
+        et tous les anciens, gardés jusqu'à ce qu'on les retire dans Réglages."""
+        liste = self.base.lire("libelles") or []
+        actuel = self.tag_prefixe
+        if actuel:
+            nd_tag, nd_album = self.tag_non_datee_complet, self.album_non_datees
+            origine = "chambre_noire" if self.noms_chambre_noire() else "stack"
+            l = next((x for x in liste if x["libelle"] == actuel), None)
+            if not l:
+                liste.append({"libelle": actuel, "tag_non_datee": nd_tag, "album_non_datees": nd_album,
+                              "origine": origine, "ajoute_le": maintenant(), "vu_le": None, "photos": 0})
+                self.base.ecrire("libelles", liste)
+            elif (l["tag_non_datee"], l["album_non_datees"]) != (nd_tag, nd_album):
+                l.update(tag_non_datee=nd_tag, album_non_datees=nd_album)
+                self.base.ecrire("libelles", liste)
+        for x in liste:
+            x["actuel"] = x["libelle"] == actuel
+        return liste
+
+    def albums_non_datees(self) -> set[str]:
+        return {l["album_non_datees"] for l in self.libelles() if l.get("album_non_datees")} | {self.album_non_datees}
+
+    def _noter_libelles_trouves(self, comptes: dict[str, int]) -> None:
+        liste = self.base.lire("libelles") or []
+        for l in liste:
+            if l["tag_non_datee"] in comptes:
+                l.update(vu_le=maintenant(), photos=comptes[l["tag_non_datee"]])
+        self.base.ecrire("libelles", liste)
+
+    def ajouter_libelle(self, libelle: str, album_non_datees: str = "") -> dict:
+        libelle = (libelle or "").strip()
+        if not libelle or "/" in libelle or len(libelle) > 80:
+            raise ErreurMillesime("Libellé vide, trop long ou avec « / » (le « / » sépare les niveaux du tag).")
+        liste = self.libelles()
+        if any(l["libelle"] == libelle for l in liste):
+            raise ErreurMillesime("Ce libellé est déjà suivi.")
+        liste.append({"libelle": libelle, "tag_non_datee": f"{libelle}/{self.cfg.tag_non_datee}",
+                      "album_non_datees": (album_non_datees or "").strip() or f"Non datées {libelle}",
+                      "origine": "manuel", "ajoute_le": maintenant(), "vu_le": None, "photos": 0})
+        self.base.ecrire("libelles", [{k: v for k, v in l.items() if k != "actuel"} for l in liste])
+        return self.sources()
+
+    def retirer_libelle(self, libelle: str) -> dict:
+        """Ne touche rien dans Immich : Millésime cesse seulement de relire ce tag ; ses photos non validées
+        quittent la liste à la prochaine synchro. Le journal (et ses Annuler) reste."""
+        liste = self.libelles()
+        l = next((x for x in liste if x["libelle"] == libelle), None)
+        if not l:
+            raise ErreurMillesime("Libellé inconnu.")
+        if l["actuel"]:
+            raise ErreurMillesime("C'est le libellé actuel : il se change dans Chambre noire (ou la stack), pas ici.")
+        self.base.ecrire("libelles", [{k: v for k, v in x.items() if k != "actuel"} for x in liste if x["libelle"] != libelle])
+        return self.sources()
+
     def etat_chambre_noire(self) -> dict:
         cn = self.noms_chambre_noire()
         return {"relie": bool(self.cfg.jeton_chambre_noire), "noms": cn,
@@ -955,6 +1024,7 @@ class Millesime:
                   "albums": {"non_datees": self.album_non_datees, "modele": self.modele_album,
                              "depuis_la_stack": not self.base.lire("album_non_datees") and bool(self.cfg.album_non_datees),
                              "depuis_chambre_noire": bool(self.noms_chambre_noire())},
+                  "libelles": self.libelles(),
                   "transhumance": bool(self.cfg.jeton_transhumance)}
         if avec_choix:
             pris = {s["cle"] for s in liste}
@@ -1065,7 +1135,7 @@ class Millesime:
             if apres.get("album_id") and apres["album_id"] not in {a["id"] for a in avant.get("albums", [])}:
                 self.immich.retirer_album(apres["album_id"], [aid])
             for al in avant.get("albums", []):
-                if al["nom"] == self.album_non_datees:
+                if al["nom"] in self.albums_non_datees():
                     self.immich.ajouter_album(al["id"], [aid])
         self.base.executer("UPDATE journal SET annule_le=? WHERE id=?", maintenant(), journal_id)
         self.base.executer("UPDATE scans SET statut='a_analyser', annee_validee=NULL WHERE asset_id=?", aid)

@@ -4,6 +4,7 @@ Fichier à lire en premier dans une nouvelle session, et à mettre à jour à ch
 
 ## État (15/11/2026)
 
+- **2.10.0 (15/11/2026)** : libellés suivis (`libelles()` dans `reglages.libelles`, l'actuel ajouté et mis à jour à chaque lecture ; `ajouter_libelle`, `retirer_libelle`, `/api/libelles`, `/api/libelles/retirer` ; `albums_non_datees()` pour Valider et Annuler ; `synchroniser` relit tous les libellés, s'arrête seulement si un tag déjà vu (`vu_le`) a disparu ou si aucun n'est trouvé). Jamais essayé sur la vraie installation.
 - **2.9.0 (15/11/2026)** : noms des non datées lus dans Chambre noire (`lire_chambre_noire`, à chaque `synchroniser` ; `tag_prefixe`, `tag_non_datee_complet`, `album_non_datees` passent par eux quand le jeton `MILLESIME_JETON_CHAMBRE_NOIRE` est posé ; derniers noms gardés dans `reglages.chambre_noire_noms`). Tuile Chambre noire dans Connexion. Jamais essayé sur la vraie installation.
 - **2.8.0 (15/11/2026)** : `GET /ha/etat` (jeton `MILLESIME_JETON_HA`, vide = fermé ; `Millesime.etat_ha`, nombres seulement) pour le package HA `systeme/millesime.yaml` ; `/api/ha/etat` retiré. Lectures notées (`carnet_vu`, `ha_vu`, rendues dans `accueil().lu_par`) ; tuile Home Assistant dans Connexion. Jamais essayé sur la vraie installation.
 - **2.7.0 à 2.7.3 (14/11/2026)** : « Datables par le nom » : plusieurs dossiers ou albums cochés d'un coup, chacun à sa date modifiable (1992, 07/1992, 14/07/1992), date proposée en face du dossier, jour précis reconnu dans un nom (« 1985-12-25 », « 9 avril 1988 »).

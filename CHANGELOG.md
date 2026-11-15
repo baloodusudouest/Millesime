@@ -2,6 +2,14 @@
 
 
 
+## 2.10.0 — 15 novembre 2026
+- **Libellés suivis.** Millésime garde en mémoire tous les libellés de numérisation, l'actuel et les anciens, et relit à chaque fois leurs tags « Non datée » et « AAAA-MM ». Changer de libellé dans Chambre noire (ou dans la stack) n'abandonne plus les anciennes photos : l'actuel s'ajoute tout seul, les anciens restent. Demandé par Julien.
+- **Réglages › Libellés suivis** : la liste (actuel, ancien, ajouté ici ; album des non datées de chacun), **Retirer** (avec confirmation ; impossible pour l'actuel) et **Ajouter un ancien libellé** à la main. Retirer ne change rien dans Immich : Millésime cesse de lire ce tag, ses photos pas encore datées quittent la liste à la relecture suivante ; le journal et ses Annuler restent.
+- Valider retire la photo de l'album des non datées de n'importe quel libellé suivi (et Annuler l'y remet).
+- Garde-fou revu : un libellé jamais trouvé dans Immich (nouveau, aucun envoi) n'arrête plus la relecture tant qu'un autre est trouvé ; un tag déjà vu qui disparaît d'Immich l'arrête sans rien vider et propose de retirer le libellé ; aucun tag trouvé : arrêt, comme avant.
+- Sources : une ligne par libellé suivi, avec son nombre de photos non datées.
+- Tests : 63 réussis. Jamais essayé sur la vraie installation.
+
 ## 2.9.0 — 15 novembre 2026
 - **Noms lus dans Chambre noire.** Relié par un jeton (`MILLESIME_JETON_CHAMBRE_NOIRE`, le même que `CHAMBRE_NOIRE_JETON_MILLESIME`), Millésime lit à chaque relecture d'Immich (`GET /externe/noms` de Chambre noire) le libellé, le tag et l'album des non datées réglés dans Chambre noire (Réglages › Noms dans Immich) et les suit : un seul réglage, côté Chambre noire. Ils passent devant la stack et les Réglages (l'album des non datés n'y est plus modifiable ; l'album par année, si). Chambre noire injoignable : les derniers noms lus restent en usage et l'erreur est montrée. Nouveau libellé sans tag encore dans Immich : la relecture s'arrête sans rien vider, comme avant. Millésime n'écrit rien dans Chambre noire.
 - `MILLESIME_TAG_PREFIXE` devient facultatif quand Chambre noire est reliée.

@@ -161,6 +161,12 @@ def test_220_sources_code_couleur_et_ajout(page):
     page.get_by_role("button", name="Ajouter des dossiers").click()
     page.get_by_role("group", name="Choisir des dossiers").wait_for()
     assert page.get_by_role("heading", name="Albums des scans tagués").count() == 1
+    # 2.10.0 : libellés suivis ; l'actuel n'a pas de bouton Retirer
+    suivis = page.get_by_role("list", name="Libellés suivis")
+    suivis.locator("li").first.wait_for()
+    assert "actuel" in suivis.locator("li").first.inner_text()
+    assert suivis.get_by_role("button", name="Retirer").count() == 0
+    assert page.get_by_placeholder("Ajouter un ancien libellé").count() == 1
     assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
 
 
