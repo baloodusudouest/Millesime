@@ -669,7 +669,7 @@ class Millesime:
         return [{**r, "origine": (r.pop("source") or "tag:").split(":", 1)[0], "noms": sorted(set(noms.get(r["asset_id"], [])))}
                 for r in lignes]
 
-    def scan(self, asset_id: str) -> dict:
+    def scan(self, asset_id: str, lien_immich: str | None = None) -> dict:
         s = self.base.un("SELECT * FROM scans WHERE asset_id=?", asset_id)
         if not s:
             raise ErreurMillesime("Scan inconnu.")
@@ -697,7 +697,9 @@ class Millesime:
         s["origine"] = (s.get("source") or "tag:").split(":", 1)[0]
         s["comparaison"] = self._comparer(s)
         etats = {v["face_id"]: v["etat"] for v in s["visages"]}
-        s["lien_immich"] = f"{self.cfg.immich_lien}/photos/{asset_id}"
+        # 2.11.0 : adresse d'Immich pour le navigateur donnée par main.py (annuaire de l'Anneau), sinon la stack
+        immich = self.cfg.immich_lien if lien_immich is None else lien_immich
+        s["lien_immich"] = f"{immich}/photos/{asset_id}"
         # groupes sans nom présents sur la photo, avec leur nombre total de visages (pour les nommer sur place)
         s["a_nommer"] = self.base.tous(f"""
             SELECT v.person_id, MIN(v.face_id) AS face_id, ? AS asset_id,
@@ -707,7 +709,7 @@ class Millesime:
             GROUP BY v.person_id""", asset_id, asset_id)
         for g in s["a_nommer"]:
             g["exemples"] = [{"face_id": g["face_id"], "asset_id": asset_id}]
-            g["lien_immich"] = f"{self.cfg.immich_lien}/people/{g['person_id']}"
+            g["lien_immich"] = f"{immich}/people/{g['person_id']}"
         # un groupe dont tous les visages de la photo ont disparu d'Immich n'est plus à nommer ici
         s["a_nommer"] = [g for g in s["a_nommer"] if any(
             etats.get(v["face_id"]) in ("groupe_sans_nom", "masque") for v in s["visages"] if v["person_id"] == g["person_id"])]
@@ -1083,7 +1085,7 @@ class Millesime:
         if src["sorte"] != "dossier":
             raise ErreurMillesime("Seul un dossier se demande à Transhumance : un album est déjà dans Immich.")
         if not self.cfg.jeton_transhumance:
-            raise ErreurMillesime("Transhumance n'est pas réglé (MILLESIME_JETON_TRANSHUMANCE) : la demande n'est pas partie.")
+            raise ErreurMillesime("Transhumance n'est pas réglé (MAISON_JETON ou MILLESIME_JETON_TRANSHUMANCE) : la demande n'est pas partie.")
         try:
             r = requests.post(self.cfg.transhumance_url + "/externe/demandes", timeout=15,
                               headers={"Authorization": f"Bearer {self.cfg.jeton_transhumance}"},
@@ -1143,7 +1145,7 @@ class Millesime:
         return {"ok": True}
 
     # ------------------------------------------------------------------ Nommer
-    def groupes_a_nommer(self) -> list[dict]:
+    def groupes_a_nommer(self, lien_immich: str | None = None) -> list[dict]:
         lignes = self.base.tous("""
             SELECT v.person_id, COUNT(*) AS visages,
                    SUM(CASE WHEN s.type='non_datee' THEN 1 ELSE 0 END) AS sur_non_datees,
@@ -1155,7 +1157,7 @@ class Millesime:
         for g in lignes:
             g["exemples"] = self.base.tous("SELECT face_id, asset_id FROM visages WHERE person_id=? LIMIT 6",
                                            g["person_id"])
-            g["lien_immich"] = f"{self.cfg.immich_lien}/people/{g['person_id']}"
+            g["lien_immich"] = f"{self.cfg.immich_lien if lien_immich is None else lien_immich}/people/{g['person_id']}"
         return lignes
 
     @staticmethod

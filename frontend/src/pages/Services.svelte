@@ -102,7 +102,7 @@
     <p class="secondaire mt-1 text-sm">Chambre noire envoie les photos numérisées dans Immich. À chaque relecture d'Immich, Millésime y lit le libellé,
       le tag et l'album des non datées réglés dans ses Réglages, et les suit. Millésime n'écrit rien dans Chambre noire.</p>
     {#if !a?.chambre_noire?.relie}
-      <p class="mt-3 text-sm">Non reliée : pose <code>MILLESIME_JETON_CHAMBRE_NOIRE</code> dans la stack (même valeur que <code>CHAMBRE_NOIRE_JETON_MILLESIME</code>).
+      <p class="mt-3 text-sm">Non reliée : pose le jeton commun <code>MAISON_JETON</code> dans la stack (ou <code>MILLESIME_JETON_CHAMBRE_NOIRE</code>, même valeur que <code>CHAMBRE_NOIRE_JETON_MILLESIME</code>).
         En attendant, les noms viennent de la stack et de <a class="lien" href="#reglages">Réglages</a>.</p>
     {:else}
       {#if a.chambre_noire.noms}

@@ -41,17 +41,22 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
       - immich-server
     environment:
       - TZ=${TZ}
-      - MILLESIME_PASSWORD=${CARNET_PASSWORD}
+      # 2.11 : variables communes de la maison (module app/maison.py) ; les anciennes restent lues en repli
+      - MAISON_PASSWORD=${MAISON_PASSWORD}         # mot de passe commun des applis (repli : MILLESIME_PASSWORD)
+      - MAISON_JETON=${MAISON_JETON:-}             # jeton commun : carnet (porte /api/etat), Transhumance, Chambre noire, Anneau
+      - MAISON_LECTURE_SEULE=${MAISON_LECTURE_SEULE:-}   # « oui » : aucune appli n'écrit ; MILLESIME_LECTURE_SEULE l'emporte si posée
+      # - MILLESIME_PASSWORD=${CARNET_PASSWORD}    # ancien nom, lu en repli
+      - MILLESIME_LECTURE_SEULE=${MILLESIME_LECTURE_SEULE:-}   # « oui » ou « non » : force Millésime seul
       - MILLESIME_IMMICH_URL=http://immich_server:2283
       - MILLESIME_IMMICH_CLE=${MILLESIME_IMMICH_CLE}
       - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
-      - MILLESIME_JETON_CARNET=${MILLESIME_JETON_CARNET}
+      - MILLESIME_JETON_CARNET=${MILLESIME_JETON_CARNET:-}   # ancien jeton de carnet, accepté en plus de MAISON_JETON
       - MILLESIME_JETON_HA=${MILLESIME_JETON_HA:-}       # 2.8 : jeton de Home Assistant (/ha/etat) ; vide : adresse fermée
       - MILLESIME_TAG_PREFIXE=${MILLESIME_TAG_PREFIXE}
       - MILLESIME_ALBUM_NON_DATEES=${MILLESIME_ALBUM_NON_DATEES:-}   # facultatif depuis la 2.2 : se règle dans l'appli
       - MILLESIME_MODELE_ALBUM=${MILLESIME_MODELE_ALBUM:-}           # facultatif depuis la 2.2 : se règle dans l'appli
-      - MILLESIME_JETON_TRANSHUMANCE=${MILLESIME_TRANSHUMANCE_JETON:-}   # 2.2 : le même que TRANSHUMANCE_JETON_MILLESIME ; vide : pas de demande
-      - MILLESIME_JETON_CHAMBRE_NOIRE=${MILLESIME_CHAMBRE_NOIRE_JETON:-} # 2.9 : le même que CHAMBRE_NOIRE_JETON_MILLESIME ; vide : noms de la stack et des Réglages
+      - MILLESIME_JETON_TRANSHUMANCE=${MILLESIME_TRANSHUMANCE_JETON:-}   # 2.2 : ancien jeton, envoyé avant MAISON_JETON tant qu'il est posé
+      - MILLESIME_JETON_CHAMBRE_NOIRE=${MILLESIME_CHAMBRE_NOIRE_JETON:-} # 2.9 : ancien jeton, envoyé avant MAISON_JETON tant qu'il est posé
     ports:
       - "${PORT_MILLESIME:-8098}:8098"
     volumes:
@@ -63,15 +68,20 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `MILLESIME_PASSWORD` | — | Mot de passe de l'interface (celui de carnet) |
+| `MAISON_PASSWORD` | — | 2.11 : mot de passe commun des applis de la maison ; repli : `MILLESIME_PASSWORD` |
+| `MAISON_JETON` | vide | 2.11 : jeton commun des échanges entre applis maison : ouvre `GET /api/etat` (carnet), part avec les demandes à Transhumance et à Chambre noire, lit l'annuaire de l'Anneau. Home Assistant et le PC gardent leurs jetons |
+| `MAISON_JETON_ANCIEN` | vide | 2.11 : accepté en plus pendant un changement de jeton commun |
+| `MAISON_LECTURE_SEULE` | vide | 2.11 : `oui` : aucune appli de la maison n'écrit ; `MILLESIME_LECTURE_SEULE` (`oui`/`non`) l'emporte pour Millésime |
+| `MAISON_ANNEAU_URL` | `http://anneau:8094` | 2.11 : adresse de l'Anneau dans la stack (annuaire des adresses, tuile « Immich ») |
+| `MILLESIME_PASSWORD` | — | Ancien nom du mot de passe (celui de carnet), lu si `MAISON_PASSWORD` est absent |
 | `MILLESIME_IMMICH_URL` | `http://immich_server:2283` | Adresse d'Immich vue depuis le conteneur (appels API) |
-| `MILLESIME_IMMICH_LIEN` | — | Adresse d'Immich pour les liens « Ouvrir dans Immich » du navigateur, par ex. `http://192.0.2.10:2283`. Vide : même machine que Millésime, port 2283 |
+| `MILLESIME_IMMICH_LIEN` | — | Repli de l'adresse d'Immich pour les liens « Ouvrir dans Immich » du navigateur, par ex. `http://192.0.2.10:2283`. Depuis la 2.11, l'adresse vient d'abord de l'Anneau (tuile « Immich », privée si la page vient de Tailscale). Vide : même machine que Millésime, port 2283 |
 | `MILLESIME_IMMICH_CLE` | — | Clé API Immich dédiée |
 | `MILLESIME_JETON_CALCUL` | — | Jeton partagé avec le calculateur du PC |
-| `MILLESIME_JETON_CARNET` | — | Jeton de `GET /api/etat`, lu par carnet |
+| `MILLESIME_JETON_CARNET` | — | Ancien jeton de `GET /api/etat`, lu par carnet ; accepté en plus de `MAISON_JETON` |
 | `MILLESIME_JETON_HA` | vide | Jeton de `GET /ha/etat`, lu par Home Assistant ; vide : adresse fermée (2.8) |
 | `MILLESIME_SYNCHRO_MINUTES` | `60` | Fréquence de relecture d'Immich |
-| `MILLESIME_LECTURE_SEULE` | — | `oui` : rien n'est écrit dans Immich (premier jour d'une mise en service) |
+| `MILLESIME_LECTURE_SEULE` | — | `oui` : rien n'est écrit dans Immich (premier jour d'une mise en service) ; `non` : écrit même si `MAISON_LECTURE_SEULE=oui` |
 | `MILLESIME_SEUIL_DOUTE` | `4` | Marge (en années) au-delà de laquelle la photo va dans « À trancher » |
 | `MILLESIME_SEUIL_SUSPECT` | `12` | Écart d'âge, en années, qui rend un visage suspect |
 | `MILLESIME_TAG_PREFIXE` | — (**obligatoire**) | Préfixe réel des tags de numérisation dans Immich, par ex. `Numérisation` : les scans datés portent `<préfixe>/AAAA-MM`, les autres `<préfixe>/Non datée` |
@@ -113,7 +123,7 @@ L'Accueil et l'écran « Calcul sur le PC » montrent en direct l’état du PC 
 
 ### API pour les autres applis
 
-- `GET /api/etat` (Bearer `MILLESIME_JETON_CARNET`) renvoie `a_analyser`, `a_dater`, `a_trancher`, `a_nommer`, `validees`, `sans_naissance` (personnes nommées sans date de naissance) et `message` (« allume le PC… »).
+- `GET /api/etat` (Bearer `MAISON_JETON` ou `MILLESIME_JETON_CARNET`) renvoie `a_analyser`, `a_dater`, `a_trancher`, `a_nommer`, `validees`, `sans_naissance` (personnes nommées sans date de naissance) et `message` (« allume le PC… »).
 - `GET /ha/etat` (Bearer `MILLESIME_JETON_HA`, 2.8) renvoie des nombres seulement : `a_dater`, `a_trancher`, `a_nommer`, `validees`, `total`, `sans_naissance` (un nombre), `a_analyser`, `pc` (`jamais_vu`, `indisponible`, `disponible`, `en_attente`, `en_cours`), `pc_pourcentage`, `pc_reste_min`, `pc_dernier_contact`.
 - `GET /api/ha/etat` est réservé à l'intégration Home Assistant, à venir (501).
 

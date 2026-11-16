@@ -15,7 +15,7 @@ class ErreurImmich(Exception):
 
 
 class LectureSeule(Exception):
-    """Écriture refusée : Millésime tourne en lecture seule (MILLESIME_LECTURE_SEULE)."""
+    """Écriture refusée : Millésime tourne en lecture seule (MAISON_LECTURE_SEULE ou MILLESIME_LECTURE_SEULE)."""
 
 
 LECTURES_EN_POST = ("/search/",)     # recherches : des POST qui ne modifient rien

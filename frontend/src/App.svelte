@@ -45,6 +45,7 @@
 
   api.get('/api/session').then((s) => {
     session.connecte = s.connecte; session.version = s.version; session.lecture_seule = !!s.lecture_seule
+    session.lecture_seule_origine = s.lecture_seule_origine || ''
     suivrePc(); if (s.connecte) compter()
   }).catch(() => (session.connecte = false))
   $effect(() => { if (session.connecte) compter() })
@@ -80,7 +81,8 @@
   <main class="contenu">
     {#if session.lecture_seule}
       <p class="mb-4 rounded-md border border-alerte/50 px-3 py-2 text-sm text-alerte" role="status">
-        Mode lecture seule : Millésime lit Immich et calcule, mais n'y écrit rien (MILLESIME_LECTURE_SEULE).</p>
+        Mode lecture seule : Millésime lit Immich et calcule, mais n'y écrit rien
+        {#if session.lecture_seule_origine === 'maison'}(toute la maison : MAISON_LECTURE_SEULE).{:else}(cette appli : MILLESIME_LECTURE_SEULE).{/if}</p>
     {/if}
     {#if enFile || FILES.includes(page)}
       <p class="retour"><a class="lien" href="#a-traiter">‹ À traiter</a></p>

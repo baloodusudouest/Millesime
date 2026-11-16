@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import maison
+
 
 def _env(nom: str, defaut: str = "") -> str:
     return os.environ.get(nom, defaut).strip()
@@ -16,7 +18,7 @@ class Config:
     immich_cle: str
     mot_de_passe: str
     jeton_calcul: str
-    jeton_carnet: str
+    jeton_carnet: str             # 2.11.0 : jeton propre de carnet ; MAISON_JETON est accepté en plus (main.py)
     tag_prefixe: str
     tag_non_datee: str
     tag_estimee: str
@@ -28,21 +30,23 @@ class Config:
     synchro_minutes: int
     # Adresse d'Immich pour les liens ouverts dans le navigateur (différente de l'adresse interne
     # au réseau Docker). Vide : le navigateur ouvre Immich sur la même machine que Millésime, port 2283.
+    # 2.11.0 : ce n'est plus qu'un repli ; l'adresse vient d'abord de l'annuaire de l'Anneau (tuile « Immich »).
     immich_lien: str = ""
     lecture_seule: bool = False     # 1.6.0 : aucune écriture dans Immich
+    lecture_seule_origine: str = ""  # 2.11.0 : « maison » (MAISON_LECTURE_SEULE), « appli » (MILLESIME_LECTURE_SEULE) ou « »
     # 2.2.0 : demande de passage envoyée à Transhumance quand un dossier choisi est entièrement daté
     transhumance_url: str = "http://transhumance:8097"
     jeton_ha: str = ""            # 2.8.0 : jeton de Home Assistant (/ha/etat) ; vide : adresse fermée
-    jeton_transhumance: str = ""    # le même que TRANSHUMANCE_JETON_MILLESIME ; vide : aucune demande n'est envoyée
+    jeton_transhumance: str = ""    # le même que TRANSHUMANCE_JETON_MILLESIME, sinon MAISON_JETON ; vide : aucune demande
     # 2.9.0 : noms des non datées lus dans Chambre noire (/externe/noms) ; jeton vide : noms de la stack et des Réglages
     chambre_noire_url: str = "http://chambre-noire:8100"
-    jeton_chambre_noire: str = ""   # le même que CHAMBRE_NOIRE_JETON_MILLESIME
+    jeton_chambre_noire: str = ""   # le même que CHAMBRE_NOIRE_JETON_MILLESIME, sinon MAISON_JETON
 
     @classmethod
     def depuis_env(cls) -> "Config":
-        mdp = _env("MILLESIME_PASSWORD")
+        mdp = maison.mot_de_passe("MILLESIME_PASSWORD")      # 2.11.0 : MAISON_PASSWORD, repli sur l'ancien nom
         if not mdp:
-            raise RuntimeError("Variable MILLESIME_PASSWORD absente : à définir dans la stack (même valeur que CARNET_PASSWORD).")
+            raise RuntimeError("Variable MAISON_PASSWORD (ou MILLESIME_PASSWORD) absente : à définir dans la stack.")
         cle = _env("MILLESIME_IMMICH_CLE")
         if not cle:
             raise RuntimeError("Variable MILLESIME_IMMICH_CLE absente : clé API Immich dédiée à Millésime.")
@@ -52,8 +56,11 @@ class Config:
         # 2.2.0 : seul le préfixe des tags reste obligatoire dans la stack. Les deux noms d'albums se règlent
         # dans l'appli (Réglages) ; les variables, si elles sont là, en donnent la valeur de départ.
         noms = {v: _env(v) for v in ("MILLESIME_TAG_PREFIXE", "MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM")}
+        # 2.11.0 : demandes envoyées aux autres applis maison : l'ancien jeton de la paire d'abord, puis MAISON_JETON
+        jeton_chambre_noire = maison.jeton_a_envoyer("MILLESIME_JETON_CHAMBRE_NOIRE")
+        jeton_transhumance = maison.jeton_a_envoyer("MILLESIME_JETON_TRANSHUMANCE")
         # 2.9.0 : relié à Chambre noire, Millésime y lit le libellé : le préfixe de la stack devient facultatif.
-        if not noms["MILLESIME_TAG_PREFIXE"] and not _env("MILLESIME_JETON_CHAMBRE_NOIRE"):
+        if not noms["MILLESIME_TAG_PREFIXE"] and not jeton_chambre_noire:
             raise RuntimeError("Variable(s) absente(s) : MILLESIME_TAG_PREFIXE. À définir dans la stack avec le nom "
                                "réel du préfixe des tags de numérisation dans Immich (voir le README).")
         if noms["MILLESIME_MODELE_ALBUM"] and "{annee}" not in noms["MILLESIME_MODELE_ALBUM"]:
@@ -76,10 +83,12 @@ class Config:
             seuil_suspect=float(_env("MILLESIME_SEUIL_SUSPECT", "12")),
             synchro_minutes=int(_env("MILLESIME_SYNCHRO_MINUTES", "60")),
             immich_lien=_env("MILLESIME_IMMICH_LIEN").rstrip("/"),
-            lecture_seule=_env("MILLESIME_LECTURE_SEULE").lower() in ("oui", "1", "true", "yes"),
+            # 2.11.0 : MAISON_LECTURE_SEULE pour toute la maison ; MILLESIME_LECTURE_SEULE (oui/non) l'emporte ici
+            lecture_seule=maison.lecture_seule("MILLESIME_LECTURE_SEULE"),
+            lecture_seule_origine=maison.origine_lecture_seule("MILLESIME_LECTURE_SEULE"),
             transhumance_url=_env("MILLESIME_TRANSHUMANCE_URL", "http://transhumance:8097").rstrip("/"),
             jeton_ha=_env("MILLESIME_JETON_HA"),
-            jeton_transhumance=_env("MILLESIME_JETON_TRANSHUMANCE"),
+            jeton_transhumance=jeton_transhumance,
             chambre_noire_url=_env("MILLESIME_CHAMBRE_NOIRE_URL", "http://chambre-noire:8100").rstrip("/"),
-            jeton_chambre_noire=_env("MILLESIME_JETON_CHAMBRE_NOIRE"),
+            jeton_chambre_noire=jeton_chambre_noire,
         )

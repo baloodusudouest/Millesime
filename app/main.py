@@ -13,7 +13,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__
+from . import __version__, maison
 from . import estimation as est
 from .auth import COMMUN, COOKIE, DUREE, Sessions, jeton_valide
 from .config import Config
@@ -63,7 +63,9 @@ async def garde(request: Request, appel):
         if not jeton_valide(request.headers.get("authorization"), m().cfg.jeton_calcul):
             return JSONResponse({"detail": "Jeton de calcul manquant ou invalide."}, status_code=401)
     elif chemin == "/api/etat":
-        if not jeton_valide(request.headers.get("authorization"), m().cfg.jeton_carnet):
+        # 2.11.0 : carnet, avec son jeton propre (MILLESIME_JETON_CARNET) ou le jeton commun MAISON_JETON
+        acceptes = tuple(j for j in (m().cfg.jeton_carnet, *maison.jetons()) if j)
+        if not maison.jeton_valide(maison.jeton_propose(request.headers), acceptes):
             return JSONResponse({"detail": "Jeton carnet manquant ou invalide."}, status_code=401)
     elif chemin.startswith("/ha/"):
         # 2.8.0 : Home Assistant, avec son propre jeton ; jeton vide dans la stack = porte fermée
@@ -76,6 +78,15 @@ async def garde(request: Request, appel):
     if chemin.startswith(("/api/", "/ha/")) and not chemin.startswith(("/api/apercu/", "/api/visage/", "/api/vignette/")):
         reponse.headers["Cache-Control"] = "no-store"
     return reponse
+
+
+ANNUAIRE = maison.Annuaire()
+
+
+def adresse_immich(request: Request) -> str:
+    """2.11.0 : adresse d'Immich pour les liens du navigateur, lue dans l'Anneau (tuile « Immich » ; privée si la
+    page vient de Tailscale). Repli : MILLESIME_IMMICH_LIEN, puis (vide) Immich sur la même machine, port 2283."""
+    return ANNUAIRE.adresse("Immich", prive=maison.est_prive(request.headers.get("host", "")), repli=m().cfg.immich_lien)
 
 
 @app.exception_handler(ErreurMillesime)
@@ -92,7 +103,9 @@ def ecriture() -> None:
     """À appeler en tête de toute route qui écrit dans Immich : refus net en lecture seule,
     avant toute trace dans le journal."""
     if m().cfg.lecture_seule:
-        raise LectureSeule("Mode lecture seule (MILLESIME_LECTURE_SEULE) : rien n'est écrit dans Immich.")
+        quelle = ("MAISON_LECTURE_SEULE, toute la maison" if m().cfg.lecture_seule_origine == "maison"
+                  else "MILLESIME_LECTURE_SEULE")
+        raise LectureSeule(f"Mode lecture seule ({quelle}) : rien n'est écrit dans Immich.")
 
 
 @app.exception_handler(ErreurImmich)
@@ -109,7 +122,9 @@ def sante():
 @app.get("/api/session")
 def session(request: Request):
     return {"connecte": ETAT["sessions"].connecte(request.cookies), "version": __version__,
-            "lecture_seule": m().cfg.lecture_seule}
+            "lecture_seule": m().cfg.lecture_seule,
+            # 2.11.0 : « maison » (MAISON_LECTURE_SEULE) ou « appli » (MILLESIME_LECTURE_SEULE)
+            "lecture_seule_origine": m().cfg.lecture_seule_origine}
 
 
 @app.post("/api/connexion")
@@ -199,8 +214,8 @@ def scans(statut: str = "a_dater"):
 
 
 @app.get("/api/scans/{asset_id}")
-def scan(asset_id: str):
-    return m().scan(asset_id)
+def scan(asset_id: str, request: Request):
+    return m().scan(asset_id, lien_immich=adresse_immich(request))
 
 
 @app.post("/api/scans/{asset_id}/valider")
@@ -285,8 +300,8 @@ def annuler(jid: int):
 
 
 @app.get("/api/nommer")
-def a_nommer():
-    return {"groupes": m().groupes_a_nommer(), "sans_naissance": m().sans_naissance()}
+def a_nommer(request: Request):
+    return {"groupes": m().groupes_a_nommer(lien_immich=adresse_immich(request)), "sans_naissance": m().sans_naissance()}
 
 
 @app.post("/api/nommer/{person_id}")

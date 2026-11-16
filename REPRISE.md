@@ -2,8 +2,9 @@
 
 Fichier à lire en premier dans une nouvelle session, et à mettre à jour à chaque fin de session, dans le même commit que le code.
 
-## État (15/11/2026)
+## État (16/11/2026)
 
+- **2.11.0 (16/11/2026)** : variables communes de la maison (`app/maison.py`, contrat 1, copie du socle à ne jamais retoucher : empreinte testée). `config.py` : `maison.mot_de_passe("MILLESIME_PASSWORD")`, `maison.lecture_seule` / `origine_lecture_seule("MILLESIME_LECTURE_SEULE")` (rendue par `/api/session` → bandeau), `maison.jeton_a_envoyer` pour `jeton_transhumance` et `jeton_chambre_noire` ; `main.py` : porte `/api/etat` = `MILLESIME_JETON_CARNET` + `maison.jetons()` ; `/ha/` et `/api/calcul/` inchangés ; `ANNUAIRE` + `adresse_immich(request)` (tuile « Immich », repli `MILLESIME_IMMICH_LIEN`) passé à `scan()` et `groupes_a_nommer()`. Jamais essayé sur la vraie installation : les nouvelles variables ne sont pas encore dans la stack.
 - **2.10.0 (15/11/2026)** : libellés suivis (`libelles()` dans `reglages.libelles`, l'actuel ajouté et mis à jour à chaque lecture ; `ajouter_libelle`, `retirer_libelle`, `/api/libelles`, `/api/libelles/retirer` ; `albums_non_datees()` pour Valider et Annuler ; `synchroniser` relit tous les libellés, s'arrête seulement si un tag déjà vu (`vu_le`) a disparu ou si aucun n'est trouvé). Jamais essayé sur la vraie installation.
 - **2.9.0 (15/11/2026)** : noms des non datées lus dans Chambre noire (`lire_chambre_noire`, à chaque `synchroniser` ; `tag_prefixe`, `tag_non_datee_complet`, `album_non_datees` passent par eux quand le jeton `MILLESIME_JETON_CHAMBRE_NOIRE` est posé ; derniers noms gardés dans `reglages.chambre_noire_noms`). Tuile Chambre noire dans Connexion. Jamais essayé sur la vraie installation.
 - **2.8.0 (15/11/2026)** : `GET /ha/etat` (jeton `MILLESIME_JETON_HA`, vide = fermé ; `Millesime.etat_ha`, nombres seulement) pour le package HA `systeme/millesime.yaml` ; `/api/ha/etat` retiré. Lectures notées (`carnet_vu`, `ha_vu`, rendues dans `accueil().lu_par`) ; tuile Home Assistant dans Connexion. Jamais essayé sur la vraie installation.

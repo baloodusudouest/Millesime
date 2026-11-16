@@ -2,6 +2,15 @@
 
 
 
+## 2.11.0 — 16 novembre 2026
+- **Variables communes de la maison** (module commun `app/maison.py`, copié tel quel du socle). Rien ne change tant que la stack n'a pas les nouvelles variables : chaque ancien nom reste lu.
+- Mot de passe : `MAISON_PASSWORD`, sinon `MILLESIME_PASSWORD` comme avant.
+- Lecture seule : `MAISON_LECTURE_SEULE=oui` met toute la maison en lecture seule ; `MILLESIME_LECTURE_SEULE` (`oui` ou `non`) l'emporte pour Millésime. Le bandeau dit d'où vient la lecture seule (toute la maison ou cette appli).
+- carnet ouvre `GET /api/etat` avec le jeton commun `MAISON_JETON` (ou `MAISON_JETON_ANCIEN` pendant un changement), et toujours avec `MILLESIME_JETON_CARNET`. Home Assistant (`MILLESIME_JETON_HA`) et le PC (`MILLESIME_JETON_CALCUL`) gardent leurs jetons.
+- Demandes à Transhumance et lecture des noms de Chambre noire : l'ancien jeton (`MILLESIME_JETON_TRANSHUMANCE`, `MILLESIME_JETON_CHAMBRE_NOIRE`) part d'abord tant qu'il est posé, sinon `MAISON_JETON`.
+- Liens « Ouvrir dans Immich » : l'adresse vient de l'Anneau (tuile « Immich », l'adresse privée si la page est ouverte par Tailscale) ; sinon `MILLESIME_IMMICH_LIEN`, sinon Immich sur la même machine, port 2283.
+- Tests : 62 réussis (44 du serveur et de la connexion commune, 18 d'écran). Jamais essayé sur la vraie installation : les nouvelles variables ne sont pas encore dans la stack.
+
 ## 2.10.0 — 15 novembre 2026
 - **Libellés suivis.** Millésime garde en mémoire tous les libellés de numérisation, l'actuel et les anciens, et relit à chaque fois leurs tags « Non datée » et « AAAA-MM ». Changer de libellé dans Chambre noire (ou dans la stack) n'abandonne plus les anciennes photos : l'actuel s'ajoute tout seul, les anciens restent. Demandé par Julien.
 - **Réglages › Libellés suivis** : la liste (actuel, ancien, ajouté ici ; album des non datées de chacun), **Retirer** (avec confirmation ; impossible pour l'actuel) et **Ajouter un ancien libellé** à la main. Retirer ne change rien dans Immich : Millésime cesse de lire ce tag, ses photos pas encore datées quittent la liste à la relecture suivante ; le journal et ses Annuler restent.

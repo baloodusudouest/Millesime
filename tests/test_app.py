@@ -22,6 +22,16 @@ def noms_de_test(monkeypatch):
     monkeypatch.setenv("MILLESIME_MODELE_ALBUM", "{annee} Numérisation")
 
 
+MAISON = ("MAISON_PASSWORD", "MAISON_JETON", "MAISON_JETON_ANCIEN", "MAISON_LECTURE_SEULE", "MAISON_ANNEAU_URL")
+
+
+@pytest.fixture(autouse=True)
+def sans_variables_maison(monkeypatch):
+    """2.11.0 : les variables communes de la maison ne viennent jamais de la machine qui lance les tests."""
+    for v in MAISON:
+        monkeypatch.delenv(v, raising=False)
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     serveur, url, E = faux.demarrer()
@@ -972,3 +982,128 @@ def test_2100_libelles_suivis(env):
     r = client.post("/api/libelles/retirer", json={"libelle": "Vieux lot"})
     assert [l["libelle"] for l in r.json()["libelles"]] == ["Numérisation"]
     assert client.post("/api/synchroniser").status_code == 200
+
+
+# ---------------------------------------------------------------- 2.11.0 : variables communes de la maison
+
+def _env_minimal(monkeypatch, tmp_path):
+    for v in ("MILLESIME_PASSWORD", "MILLESIME_LECTURE_SEULE", "MILLESIME_JETON_TRANSHUMANCE",
+              "MILLESIME_JETON_CHAMBRE_NOIRE", "MILLESIME_IMMICH_LIEN"):
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("MILLESIME_IMMICH_CLE", "x")
+    monkeypatch.setenv("MILLESIME_ETAT", str(tmp_path))
+    noms_de_test(monkeypatch)
+
+
+def test_2110_module_maison_non_retouche():
+    from app import maison
+    assert maison.CONTRAT == 1
+    assert maison.empreinte_calculee() == maison.empreinte_ecrite()
+
+
+def test_2110_mot_de_passe_commun_puis_repli(monkeypatch, tmp_path):
+    from app.config import Config
+    _env_minimal(monkeypatch, tmp_path)
+    with pytest.raises(RuntimeError, match="MAISON_PASSWORD \\(ou MILLESIME_PASSWORD\\)"):
+        Config.depuis_env()
+    monkeypatch.setenv("MILLESIME_PASSWORD", "ancien")
+    assert Config.depuis_env().mot_de_passe == "ancien"                 # repli : l'ancien nom
+    monkeypatch.setenv("MAISON_PASSWORD", "commun")
+    assert Config.depuis_env().mot_de_passe == "commun"                 # le commun passe devant
+
+
+def test_2110_lecture_seule_maison_et_forcage(monkeypatch, tmp_path):
+    from app.config import Config
+    _env_minimal(monkeypatch, tmp_path)
+    monkeypatch.setenv("MAISON_PASSWORD", "commun")
+    c = Config.depuis_env()
+    assert not c.lecture_seule and c.lecture_seule_origine == ""
+    monkeypatch.setenv("MAISON_LECTURE_SEULE", "oui")
+    c = Config.depuis_env()
+    assert c.lecture_seule and c.lecture_seule_origine == "maison"
+    monkeypatch.setenv("MILLESIME_LECTURE_SEULE", "non")                # l'appli force l'écriture
+    c = Config.depuis_env()
+    assert not c.lecture_seule and c.lecture_seule_origine == ""
+    monkeypatch.delenv("MAISON_LECTURE_SEULE")
+    monkeypatch.setenv("MILLESIME_LECTURE_SEULE", "1")                  # valeurs acceptées d'avant : toujours valables
+    c = Config.depuis_env()
+    assert c.lecture_seule and c.lecture_seule_origine == "appli"
+
+
+def test_2110_lecture_seule_maison_dite_a_l_ecran(env, monkeypatch):
+    client, _ = env
+    from app import main
+    connecter(client)
+    main.m().cfg.lecture_seule, main.m().cfg.lecture_seule_origine = True, "maison"
+    s = client.get("/api/session").json()
+    assert s["lecture_seule"] and s["lecture_seule_origine"] == "maison"
+    r = client.post("/api/scans/nd-sans/valider", json={"annee": 1990})
+    assert r.status_code == 409 and "MAISON_LECTURE_SEULE" in r.json()["detail"]
+
+
+def test_2110_portes_a_jeton(env, monkeypatch):
+    """/api/etat (carnet) s'ouvre avec MAISON_JETON et toujours avec l'ancien ; HA et le PC gardent les leurs."""
+    client, _ = env
+    commun = {"Authorization": "Bearer jeton-commun"}
+    assert client.get("/api/etat", headers=commun).status_code == 401           # pas encore dans la stack
+    monkeypatch.setenv("MAISON_JETON", "jeton-commun")
+    assert client.get("/api/etat", headers=commun).status_code == 200
+    assert client.get("/api/etat", headers={"X-Maison-Jeton": "jeton-commun"}).status_code == 200
+    assert client.get("/api/etat", headers={"Authorization": f"Bearer {JK}"}).status_code == 200   # l'ancien
+    monkeypatch.setenv("MAISON_JETON_ANCIEN", "jeton-d-avant")
+    assert client.get("/api/etat", headers={"Authorization": "Bearer jeton-d-avant"}).status_code == 200
+    assert client.get("/api/etat", headers={"Authorization": "Bearer faux"}).status_code == 401
+    assert client.get("/api/etat").status_code == 401
+    # Home Assistant et le calculateur du PC ne s'ouvrent pas avec le jeton commun
+    assert client.get("/ha/etat", headers=commun).status_code == 401
+    assert client.get("/ha/etat", headers={"Authorization": f"Bearer {JH}"}).status_code == 200
+    assert client.get("/api/calcul/taches", headers=commun).status_code == 401
+    # sans aucun jeton dans la stack : porte fermée, même avec un en-tête vide
+    from app import main
+    main.m().cfg.jeton_carnet = ""
+    monkeypatch.delenv("MAISON_JETON")
+    monkeypatch.delenv("MAISON_JETON_ANCIEN")
+    assert client.get("/api/etat", headers={"Authorization": "Bearer "}).status_code == 401
+
+
+def test_2110_jetons_envoyes(monkeypatch, tmp_path):
+    """Transhumance et Chambre noire : l'ancien jeton de la paire d'abord, puis MAISON_JETON."""
+    from app.config import Config
+    _env_minimal(monkeypatch, tmp_path)
+    monkeypatch.setenv("MAISON_PASSWORD", "commun")
+    c = Config.depuis_env()
+    assert c.jeton_transhumance == "" and c.jeton_chambre_noire == ""
+    monkeypatch.setenv("MAISON_JETON", "jeton-commun")
+    c = Config.depuis_env()
+    assert c.jeton_transhumance == "jeton-commun" and c.jeton_chambre_noire == "jeton-commun"
+    monkeypatch.setenv("MILLESIME_JETON_TRANSHUMANCE", "jeton-tr")
+    monkeypatch.setenv("MILLESIME_JETON_CHAMBRE_NOIRE", "jeton-cn")
+    c = Config.depuis_env()
+    assert c.jeton_transhumance == "jeton-tr" and c.jeton_chambre_noire == "jeton-cn"
+    # relié à Chambre noire par le seul jeton commun : le préfixe de la stack reste facultatif
+    monkeypatch.delenv("MILLESIME_JETON_CHAMBRE_NOIRE")
+    monkeypatch.delenv("MILLESIME_TAG_PREFIXE")
+    assert Config.depuis_env().tag_prefixe == ""
+
+
+def test_2110_adresse_d_immich_par_l_annuaire(env, monkeypatch):
+    client, _ = env
+    from app import main, maison
+    connecter(client)
+    client.post("/api/synchroniser")
+    services = [{"nom": "Immich", "locale": "http://nas.lan:2283/", "privee": "https://immich.exemple.ts.net"}]
+    monkeypatch.setattr(main, "ANNUAIRE", maison.Annuaire(jeton="j", lire=lambda: services))
+    s = client.get("/api/scans/nd-sans").json()
+    assert s["lien_immich"] == "http://nas.lan:2283/photos/nd-sans"
+    s = client.get("/api/scans/nd-sans", headers={"Host": "millesime.exemple.ts.net"}).json()
+    assert s["lien_immich"] == "https://immich.exemple.ts.net/photos/nd-sans"
+    assert all(g["lien_immich"].startswith("http://nas.lan:2283/people/") for g in client.get("/api/nommer").json()["groupes"])
+
+    # Anneau injoignable : l'ancienne variable, puis le chemin seul (le navigateur complète)
+    def injoignable():
+        raise OSError("pas d'Anneau")
+    monkeypatch.setattr(main, "ANNUAIRE", maison.Annuaire(jeton="j", lire=injoignable))
+    main.m().cfg.immich_lien = "http://repli:2283"
+    assert client.get("/api/scans/nd-sans").json()["lien_immich"] == "http://repli:2283/photos/nd-sans"
+    main.m().cfg.immich_lien = ""
+    assert client.get("/api/scans/nd-sans").json()["lien_immich"] == "/photos/nd-sans"

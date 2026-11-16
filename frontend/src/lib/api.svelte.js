@@ -1,5 +1,5 @@
 // Appels à l'API Millésime. Une réponse 401 renvoie à l'écran de connexion.
-export const session = $state({ connecte: null, version: '', lecture_seule: false })
+export const session = $state({ connecte: null, version: '', lecture_seule: false, lecture_seule_origine: '' })
 
 async function appel(methode, chemin, corps) {
   const r = await fetch(chemin, {
@@ -25,8 +25,8 @@ export const api = {
 export const visage = (asset, face) => `/api/visage/${asset}/${face}`
 export const apercu = (asset) => `/api/apercu/${asset}`
 
-// Lien vers Immich ouvert dans le navigateur. Le serveur renvoie une adresse complète si
-// MILLESIME_IMMICH_LIEN est défini, sinon un chemin (/photos/…) : Immich est alors cherché sur
+// Lien vers Immich ouvert dans le navigateur. Le serveur renvoie une adresse complète si l'Anneau la connaît
+// (tuile « Immich », 2.11.0) ou si MILLESIME_IMMICH_LIEN est défini, sinon un chemin (/photos/…) : Immich est alors cherché sur
 // la même machine que Millésime (192.0.2.10, nom Tailscale…), port 2283.
 export function versImmich(lien) {
   if (!lien || !lien.startsWith('/')) return lien
