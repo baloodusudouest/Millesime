@@ -1,5 +1,15 @@
 # Journal des versions
 
+## 2.12.0 — 16 novembre 2026
+- **Les réglages d'usage quittent la stack pour l'écran Réglages.** Nouvelle tuile **Lecture d'Immich** : le libellé des numérisations (avant `MILLESIME_TAG_PREFIXE` ; facultatif si Chambre noire est reliée) et la fréquence de relecture d'Immich (avant `MILLESIME_SYNCHRO_MINUTES`, 5 à 1440 minutes, prise en compte sans redémarrer). Les noms d'albums et les libellés suivis restent où ils étaient (Réglages, depuis la 2.2 et la 2.10).
+- **Reprise une seule fois** : au premier démarrage de la 2.12.0, chaque réglage encore absent prend la valeur de son ancienne variable de la stack (`MILLESIME_TAG_PREFIXE`, `MILLESIME_SYNCHRO_MINUTES`, `MILLESIME_ALBUM_NON_DATEES`, `MILLESIME_MODELE_ALBUM`) ; une ligne au journal le dit. Ensuite ces variables ne sont plus jamais lues. Une valeur fausse (modèle sans `{annee}`, nombre illisible) est ignorée.
+- **Sauvegarde chez l'Anneau** : `GET /externe/sauvegarde` (jeton commun `MAISON_JETON` ; vide : porte fermée) rend les réglages d'usage, jamais une variable, un chemin ou un secret.
+- **Restaurer les réglages** (Réglages) : choisir une date, voir ce qui changerait (actuel → sauvegardé), confirmer. Ne change que les réglages, rien dans Immich : permis même en lecture seule. Anneau injoignable ou rien à restaurer : un message clair. La restauration est notée au journal.
+- `GET /api/reglages` et `PUT /api/reglages` (connexion requise) ; une valeur du mauvais type est refusée avec un message clair, et rien n'est changé.
+- **Anciens noms retirés** : `MILLESIME_PASSWORD` (le mot de passe est `MAISON_PASSWORD`, 12 caractères au moins, sinon Millésime ne démarre pas), `MILLESIME_JETON_CARNET` (`/api/etat` s'ouvre avec `MAISON_JETON` seul), `MILLESIME_JETON_TRANSHUMANCE` et `MILLESIME_JETON_CHAMBRE_NOIRE` (les demandes partent avec `MAISON_JETON`), `MILLESIME_IMMICH_LIEN` (l'adresse d'Immich vient de l'Anneau, sinon même machine, port 2283). Restent : `MILLESIME_LECTURE_SEULE`, `MILLESIME_JETON_HA`, `MILLESIME_JETON_CALCUL`, `MILLESIME_IMMICH_CLE`, `MILLESIME_IMMICH_URL`.
+- Le libellé des numérisations n'est plus exigé au démarrage : sans lui (et sans Chambre noire), la relecture d'Immich s'arrête avec un message qui renvoie à Réglages.
+- Tests : 76 réussis et 1 sauté sans MiVOLO (56 du serveur, de la connexion commune et des outils de mesure ; 20 d’écran PC et iPhone). Jamais essayé sur la vraie installation.
+
 
 
 ## 2.11.0 — 16 novembre 2026

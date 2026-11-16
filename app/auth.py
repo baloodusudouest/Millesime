@@ -1,6 +1,6 @@
 """Connexion par mot de passe unique et cookie de session signé (HMAC), comme carnet.
 
-Le mot de passe est celui de carnet (MILLESIME_PASSWORD=${CARNET_PASSWORD} dans la stack).
+Le mot de passe est le mot de passe commun des applis de la maison (MAISON_PASSWORD, seul lu depuis la 2.12.0).
 « Se déconnecter » change la génération : tous les cookies émis avant deviennent invalides.
 """
 from __future__ import annotations

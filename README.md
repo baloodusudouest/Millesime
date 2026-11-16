@@ -14,7 +14,7 @@ Dater les photos papier numérisées à partir de l'âge des visages qu'elles co
 | À vérifier | Visages dont l'âge estimé contredit l'âge connu, signe d'un groupe mélangé ou d'une naissance fausse |
 | À traiter | Bilan (photos datées sur le total) et une tuile par file : À dater, À trancher, À nommer, À vérifier, Sans naissance, À calculer sur le PC |
 | Connexion | Une tuile par service : Immich (relecture), Calculateur du PC (état, mode d'emploi), carnet |
-| Réglages | Précision de l'indice, journal de chaque écriture dans Immich avec Annuler, déconnexion |
+| Réglages | Précision de l'indice, lecture d'Immich (libellé, fréquence), sources et noms d'albums, libellés suivis, restaurer les réglages (sauvegarde de l'Anneau), journal de chaque écriture dans Immich avec Annuler, déconnexion |
 
 **Écriture à la validation** :
 
@@ -41,22 +41,18 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
       - immich-server
     environment:
       - TZ=${TZ}
-      # 2.11 : variables communes de la maison (module app/maison.py) ; les anciennes restent lues en repli
-      - MAISON_PASSWORD=${MAISON_PASSWORD}         # mot de passe commun des applis (repli : MILLESIME_PASSWORD)
-      - MAISON_JETON=${MAISON_JETON:-}             # jeton commun : carnet (porte /api/etat), Transhumance, Chambre noire, Anneau
+      # Variables communes de la maison (module app/maison.py) ; depuis la 2.12, seules lues pour le mot de passe et le jeton
+      - MAISON_PASSWORD=${MAISON_PASSWORD}         # mot de passe commun des applis (12 caractères au moins)
+      - MAISON_JETON=${MAISON_JETON:-}             # jeton commun : carnet (porte /api/etat), Anneau (sauvegarde, annuaire), Transhumance, Chambre noire
       - MAISON_LECTURE_SEULE=${MAISON_LECTURE_SEULE:-}   # « oui » : aucune appli n'écrit ; MILLESIME_LECTURE_SEULE l'emporte si posée
-      # - MILLESIME_PASSWORD=${CARNET_PASSWORD}    # ancien nom, lu en repli
       - MILLESIME_LECTURE_SEULE=${MILLESIME_LECTURE_SEULE:-}   # « oui » ou « non » : force Millésime seul
       - MILLESIME_IMMICH_URL=http://immich_server:2283
       - MILLESIME_IMMICH_CLE=${MILLESIME_IMMICH_CLE}
       - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
-      - MILLESIME_JETON_CARNET=${MILLESIME_JETON_CARNET:-}   # ancien jeton de carnet, accepté en plus de MAISON_JETON
       - MILLESIME_JETON_HA=${MILLESIME_JETON_HA:-}       # 2.8 : jeton de Home Assistant (/ha/etat) ; vide : adresse fermée
-      - MILLESIME_TAG_PREFIXE=${MILLESIME_TAG_PREFIXE}
-      - MILLESIME_ALBUM_NON_DATEES=${MILLESIME_ALBUM_NON_DATEES:-}   # facultatif depuis la 2.2 : se règle dans l'appli
-      - MILLESIME_MODELE_ALBUM=${MILLESIME_MODELE_ALBUM:-}           # facultatif depuis la 2.2 : se règle dans l'appli
-      - MILLESIME_JETON_TRANSHUMANCE=${MILLESIME_TRANSHUMANCE_JETON:-}   # 2.2 : ancien jeton, envoyé avant MAISON_JETON tant qu'il est posé
-      - MILLESIME_JETON_CHAMBRE_NOIRE=${MILLESIME_CHAMBRE_NOIRE_JETON:-} # 2.9 : ancien jeton, envoyé avant MAISON_JETON tant qu'il est posé
+      # 2.12 : le libellé des numérisations, la relecture d'Immich et les noms d'albums se règlent dans Réglages.
+      # Les anciennes lignes MILLESIME_TAG_PREFIXE, MILLESIME_SYNCHRO_MINUTES, MILLESIME_ALBUM_NON_DATEES et
+      # MILLESIME_MODELE_ALBUM ne sont lues qu'une fois, au premier démarrage de la 2.12, pour reprendre leur valeur.
     ports:
       - "${PORT_MILLESIME:-8098}:8098"
     volumes:
@@ -68,29 +64,34 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `MAISON_PASSWORD` | — | 2.11 : mot de passe commun des applis de la maison ; repli : `MILLESIME_PASSWORD` |
-| `MAISON_JETON` | vide | 2.11 : jeton commun des échanges entre applis maison : ouvre `GET /api/etat` (carnet), part avec les demandes à Transhumance et à Chambre noire, lit l'annuaire de l'Anneau. Home Assistant et le PC gardent leurs jetons |
-| `MAISON_JETON_ANCIEN` | vide | 2.11 : accepté en plus pendant un changement de jeton commun |
-| `MAISON_LECTURE_SEULE` | vide | 2.11 : `oui` : aucune appli de la maison n'écrit ; `MILLESIME_LECTURE_SEULE` (`oui`/`non`) l'emporte pour Millésime |
-| `MAISON_ANNEAU_URL` | `http://anneau:8094` | 2.11 : adresse de l'Anneau dans la stack (annuaire des adresses, tuile « Immich ») |
-| `MILLESIME_PASSWORD` | — | Ancien nom du mot de passe (celui de carnet), lu si `MAISON_PASSWORD` est absent |
+| `MAISON_PASSWORD` | — | Mot de passe commun des applis de la maison (12 caractères au moins) ; seul lu depuis la 2.12 |
+| `MAISON_JETON` | vide | Jeton commun des échanges entre applis maison : ouvre `GET /api/etat` (carnet) et `GET /externe/sauvegarde` (Anneau), part avec les demandes à Transhumance, à Chambre noire et à l'Anneau (annuaire, sauvegardes). Vide : ces portes sont fermées. Home Assistant et le PC gardent leurs jetons |
+| `MAISON_JETON_ANCIEN` | vide | Accepté en plus pendant un changement de jeton commun |
+| `MAISON_LECTURE_SEULE` | vide | `oui` : aucune appli de la maison n'écrit ; `MILLESIME_LECTURE_SEULE` (`oui`/`non`) l'emporte pour Millésime |
+| `MAISON_ANNEAU_URL` | `http://anneau:8094` | Adresse de l'Anneau dans la stack (annuaire des adresses, sauvegardes des réglages) |
 | `MILLESIME_IMMICH_URL` | `http://immich_server:2283` | Adresse d'Immich vue depuis le conteneur (appels API) |
-| `MILLESIME_IMMICH_LIEN` | — | Repli de l'adresse d'Immich pour les liens « Ouvrir dans Immich » du navigateur, par ex. `http://192.0.2.10:2283`. Depuis la 2.11, l'adresse vient d'abord de l'Anneau (tuile « Immich », privée si la page vient de Tailscale). Vide : même machine que Millésime, port 2283 |
 | `MILLESIME_IMMICH_CLE` | — | Clé API Immich dédiée |
 | `MILLESIME_JETON_CALCUL` | — | Jeton partagé avec le calculateur du PC |
-| `MILLESIME_JETON_CARNET` | — | Ancien jeton de `GET /api/etat`, lu par carnet ; accepté en plus de `MAISON_JETON` |
 | `MILLESIME_JETON_HA` | vide | Jeton de `GET /ha/etat`, lu par Home Assistant ; vide : adresse fermée (2.8) |
-| `MILLESIME_SYNCHRO_MINUTES` | `60` | Fréquence de relecture d'Immich |
 | `MILLESIME_LECTURE_SEULE` | — | `oui` : rien n'est écrit dans Immich (premier jour d'une mise en service) ; `non` : écrit même si `MAISON_LECTURE_SEULE=oui` |
 | `MILLESIME_SEUIL_DOUTE` | `4` | Marge (en années) au-delà de laquelle la photo va dans « À trancher » |
 | `MILLESIME_SEUIL_SUSPECT` | `12` | Écart d'âge, en années, qui rend un visage suspect |
-| `MILLESIME_TAG_PREFIXE` | — (**obligatoire**) | Préfixe réel des tags de numérisation dans Immich, par ex. `Numérisation` : les scans datés portent `<préfixe>/AAAA-MM`, les autres `<préfixe>/Non datée` |
 | `MILLESIME_TAG_NON_DATEE` | `Non datée` | Sous-tag des scans sans date |
 | `MILLESIME_TAG_ESTIMEE` | `Date estimée` | Préfixe du tag écrit à la validation |
-| `MILLESIME_ALBUM_NON_DATEES` | — (facultatif depuis la 2.2 : se règle dans Réglages) | Nom réel de l'album des scans non datés, par ex. `Non datées Numérisation` |
-| `MILLESIME_MODELE_ALBUM` | — (facultatif depuis la 2.2 : se règle dans Réglages) | Nom des albums par année ; doit contenir `{annee}`, par ex. `{annee} Numérisation` |
 
-Depuis la 1.5.1, ces trois noms ne sont plus écrits dans le code : ils sont propres à chaque photothèque et se règlent dans les variables de la stack. Sans eux, Millésime refuse de démarrer ; si le tag des scans non datés est introuvable dans Immich, la synchronisation s'arrête sans rien modifier.
+Les liens « Ouvrir dans Immich » prennent l'adresse que l'Anneau connaît (tuile « Immich », l'adresse privée si la page est ouverte par Tailscale) ; sinon Immich est cherché sur la même machine que Millésime, port 2283.
+
+**Réglages d'usage (2.12)** : ils ne sont plus dans la stack mais dans l'écran Réglages, gardés dans `/state` et sauvegardés chaque nuit par l'Anneau (« Restaurer les réglages » les relit chez lui).
+
+| Réglage | Type | Défaut | Repris une fois de |
+|---|---|---|---|
+| `tag_prefixe` — libellé des numérisations (les scans datés portent `<libellé>/AAAA-MM`, les autres `<libellé>/Non datée`) | texte, sans « / » ; facultatif si Chambre noire est reliée (son libellé passe devant) | vide | `MILLESIME_TAG_PREFIXE` |
+| `synchro_minutes` — relecture d'Immich | entier, 5 à 1440 ; pris en compte sans redémarrer | `60` | `MILLESIME_SYNCHRO_MINUTES` |
+| `album_non_datees` — album des scans non datés | texte (Chambre noire passe devant si elle est reliée) | vide | `MILLESIME_ALBUM_NON_DATEES` |
+| `modele_album` — albums par année | texte contenant `{annee}` | vide | `MILLESIME_MODELE_ALBUM` |
+| `libelles` — anciens libellés suivis (2.10) | liste | aucun | — |
+
+Les noms de tags et d'albums ne sont jamais écrits dans le code (dépôt public) : ils sont propres à chaque photothèque. Si le tag des scans non datés est introuvable dans Immich, la synchronisation s'arrête sans rien modifier ; sans noms d'albums, valider un scan tagué est refusé.
 
 La clé API Immich doit avoir ces permissions :
 
@@ -123,9 +124,9 @@ L'Accueil et l'écran « Calcul sur le PC » montrent en direct l’état du PC 
 
 ### API pour les autres applis
 
-- `GET /api/etat` (Bearer `MAISON_JETON` ou `MILLESIME_JETON_CARNET`) renvoie `a_analyser`, `a_dater`, `a_trancher`, `a_nommer`, `validees`, `sans_naissance` (personnes nommées sans date de naissance) et `message` (« allume le PC… »).
+- `GET /api/etat` (Bearer `MAISON_JETON`) renvoie `a_analyser`, `a_dater`, `a_trancher`, `a_nommer`, `validees`, `sans_naissance` (personnes nommées sans date de naissance) et `message` (« allume le PC… »).
 - `GET /ha/etat` (Bearer `MILLESIME_JETON_HA`, 2.8) renvoie des nombres seulement : `a_dater`, `a_trancher`, `a_nommer`, `validees`, `total`, `sans_naissance` (un nombre), `a_analyser`, `pc` (`jamais_vu`, `indisponible`, `disponible`, `en_attente`, `en_cours`), `pc_pourcentage`, `pc_reste_min`, `pc_dernier_contact`.
-- `GET /api/ha/etat` est réservé à l'intégration Home Assistant, à venir (501).
+- `GET /externe/sauvegarde` (Bearer `MAISON_JETON`, 2.12 ; `MAISON_JETON` vide : 404) renvoie les réglages d'usage pour l'Anneau (contrat de sauvegarde 1 : `contrat`, `appli`, `version`, `le`, `reglages`), jamais une variable, un chemin ou un secret.
 
 ## Test n°2 sur le PC (MiVOLO + vision locale)
 

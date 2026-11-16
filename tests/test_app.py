@@ -11,8 +11,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import faux_immich_app as faux  # noqa: E402
 
-MDP = "secret-carnet"
-JC, JK, JH = "jeton-calcul", "jeton-carnet", "jeton-ha"
+MDP = "secret-commun-de-la-maison"
+JC, JK, JH = "jeton-calcul", "jeton-maison", "jeton-ha"       # JK : MAISON_JETON (carnet et les autres applis maison)
 
 
 def noms_de_test(monkeypatch):
@@ -37,9 +37,8 @@ def env(tmp_path, monkeypatch):
     serveur, url, E = faux.demarrer()
     monkeypatch.setenv("MILLESIME_IMMICH_URL", url)
     monkeypatch.setenv("MILLESIME_IMMICH_CLE", faux.CLE)
-    monkeypatch.setenv("MILLESIME_PASSWORD", MDP)
+    monkeypatch.setenv("MAISON_PASSWORD", MDP)
     monkeypatch.setenv("MILLESIME_JETON_CALCUL", JC)
-    monkeypatch.setenv("MILLESIME_JETON_CARNET", JK)
     monkeypatch.setenv("MILLESIME_JETON_HA", JH)
     monkeypatch.setenv("MILLESIME_ETAT", str(tmp_path))
     noms_de_test(monkeypatch)
@@ -49,6 +48,9 @@ def env(tmp_path, monkeypatch):
     main.ETAT.clear()
     main.ETAT["m"] = Millesime(Config.depuis_env())
     main.ETAT["synchro_auto"] = False
+    # 2.12.0 : MAISON_JETON ouvre /api/etat et /externe/sauvegarde (lu à chaque demande). Posé après la Config pour que
+    # Chambre noire et Transhumance restent « non reliées » dans les tests qui ne le disent pas.
+    monkeypatch.setenv("MAISON_JETON", JK)
     with TestClient(main.app) as client:
         yield client, E
     serveur.shutdown()
@@ -353,21 +355,6 @@ def test_relire_une_photo(env):
     assert s["statut"] == "a_analyser"            # le visage de Hugo attend le calcul sur le PC
 
 
-def test_lien_immich_pour_le_navigateur(monkeypatch):
-    """Les liens « Ouvrir dans Immich » ne doivent jamais pointer vers l'adresse interne Docker."""
-    from app.config import Config
-    monkeypatch.setenv("MILLESIME_PASSWORD", "x")
-    monkeypatch.setenv("MILLESIME_IMMICH_CLE", "x")
-    monkeypatch.setenv("MILLESIME_ETAT", "/tmp/millesime-test-lien")
-    noms_de_test(monkeypatch)
-    monkeypatch.setenv("MILLESIME_IMMICH_URL", "http://immich_server:2283")
-    monkeypatch.delenv("MILLESIME_IMMICH_LIEN", raising=False)
-    cfg = Config.depuis_env()
-    assert cfg.immich_lien == ""                       # chemin relatif → complété par le navigateur
-    monkeypatch.setenv("MILLESIME_IMMICH_LIEN", "http://192.0.2.10:2283/")
-    assert Config.depuis_env().immich_lien == "http://192.0.2.10:2283"
-
-
 def test_veille_du_pc(env):
     client, E = env
     connecter(client)
@@ -471,19 +458,13 @@ def test_151_noms_obligatoires_et_tag_introuvable(env, monkeypatch):
     client.post("/api/synchroniser")
     avant = client.get("/api/accueil").json()["compteurs"]
     assert avant["total"] > 0
-    monkeypatch.delenv("MILLESIME_TAG_PREFIXE")
-    with pytest.raises(RuntimeError, match="MILLESIME_TAG_PREFIXE"):
-        Config.depuis_env()
-    noms_de_test(monkeypatch)
-    for v in ("MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM"):       # 2.2.0 : réglables dans l'appli
+    # 2.12.0 : les noms ne sont plus exigés au démarrage : ce sont des réglages (Réglages), repris de la stack une fois
+    for v in ("MILLESIME_TAG_PREFIXE", "MILLESIME_ALBUM_NON_DATEES", "MILLESIME_MODELE_ALBUM"):
         monkeypatch.delenv(v)
-        Config.depuis_env()
-        noms_de_test(monkeypatch)
-    monkeypatch.setenv("MILLESIME_MODELE_ALBUM", "Numérisation")
-    with pytest.raises(RuntimeError, match="annee"):
-        Config.depuis_env()
+    Config.depuis_env()
+    noms_de_test(monkeypatch)
     from app import main
-    main.m().cfg.tag_prefixe = "Autre nom"
+    main.m().base.ecrire("tag_prefixe", "Autre nom")
     # 2.10.0 : l'ancien libellé reste suivi ; le nouveau, jamais trouvé, ne vide rien et n'arrête rien
     r = client.post("/api/synchroniser")
     assert r.status_code == 200
@@ -496,7 +477,7 @@ def test_151_noms_obligatoires_et_tag_introuvable(env, monkeypatch):
     assert r.status_code == 400 and "introuvable" in r.json()["detail"]
     assert client.get("/api/accueil").json()["compteurs"] == avant
     main.m().base.ecrire("libelles", [])
-    main.m().cfg.tag_prefixe = "Numérisation"
+    main.m().base.ecrire("tag_prefixe", "Numérisation")
 
 
 
@@ -651,16 +632,15 @@ def test_220_dates_dans_les_noms():
 def test_220_noms_d_albums_regles_dans_l_appli(env):
     client, E = env
     cible, s = _pret_a_dater(client, E)
-    assert client.get("/api/sources").json()["albums"] == {"non_datees": "Non datées Numérisation", "modele": "{annee} Numérisation", "depuis_la_stack": True, "depuis_chambre_noire": False}
+    assert client.get("/api/sources").json()["albums"] == {"non_datees": "Non datées Numérisation", "modele": "{annee} Numérisation", "depuis_chambre_noire": False}
     assert client.post("/api/reglages/albums", json={"non_datees": "Non datées Numérisation", "modele": "Sans année"}).status_code == 400
     assert client.post("/api/reglages/albums", json={"non_datees": "", "modele": "{annee} X"}).status_code == 400
     r = client.post("/api/reglages/albums", json={"non_datees": "Non datées Numérisation", "modele": "Scans de {annee}"}).json()
-    assert r["albums"] == {"non_datees": "Non datées Numérisation", "modele": "Scans de {annee}", "depuis_la_stack": False, "depuis_chambre_noire": False}
+    assert r["albums"] == {"non_datees": "Non datées Numérisation", "modele": "Scans de {annee}", "depuis_chambre_noire": False}
     r = client.post(f"/api/scans/{cible}/valider", json={"annee": s["annee_proposee"], "marge": s["marge"]}).json()
     assert r["album"] == f"Scans de {s['annee_proposee']}" and cible not in E["albums"]["al-nd"]["assets"]
-    # Sans variable dans la stack ni réglage : valider un scan tagué est refusé net, avant toute écriture
+    # Sans réglage : valider un scan tagué est refusé net, avant toute écriture
     from app import main
-    main.m().cfg.album_non_datees = main.m().cfg.modele_album = ""
     main.m().base.executer("DELETE FROM reglages WHERE cle IN ('album_non_datees', 'modele_album')")
     autre = client.get("/api/scans?statut=a_dater").json()[0]["asset_id"]
     E["requetes"].clear()
@@ -693,7 +673,7 @@ def test_220_demande_a_transhumance(env, monkeypatch):
     r = client.post("/api/scans/dos0/garder", json={"laquelle": "actuelle"}).json()
     assert r["demande"] == "" and envois == []                                   # il reste une photo
     r = client.post("/api/scans/dos1/garder", json={"laquelle": "actuelle"}).json()
-    assert "n'est pas réglé" in r["demande"] and envois == []
+    assert "n'est pas reliée" in r["demande"] and envois == []
     assert client.post("/api/sources/demander", json={"cle": cle}).status_code == 400
     assert client.post("/api/sources/demander", json={"cle": "album:al-vieux"}).status_code == 400   # un album ne se demande pas
     main.m().cfg.jeton_transhumance = "jeton-tr"
@@ -939,17 +919,17 @@ def test_290_noms_lus_dans_chambre_noire(env, monkeypatch):
     assert "jeton refusé" in client.get("/api/accueil").json()["chambre_noire"]["erreur"]["detail"]
 
 
-def test_290_prefixe_facultatif_si_chambre_noire(monkeypatch, tmp_path):
-    from app.config import Config
-    monkeypatch.setenv("MILLESIME_PASSWORD", MDP)
-    monkeypatch.setenv("MILLESIME_IMMICH_CLE", "x")
-    monkeypatch.setenv("MILLESIME_ETAT", str(tmp_path))
-    monkeypatch.delenv("MILLESIME_TAG_PREFIXE", raising=False)
-    monkeypatch.delenv("MILLESIME_JETON_CHAMBRE_NOIRE", raising=False)
-    with pytest.raises(RuntimeError):
-        Config.depuis_env()
-    monkeypatch.setenv("MILLESIME_JETON_CHAMBRE_NOIRE", "j")
-    assert Config.depuis_env().tag_prefixe == ""
+def test_290_prefixe_facultatif_si_chambre_noire(env):
+    """2.12.0 : le libellé est un réglage ; vide, il est refusé tant que Chambre noire n'est pas reliée."""
+    client, _ = env
+    connecter(client)
+    from app import main
+    r = client.put("/api/reglages", json={"tag_prefixe": ""})
+    assert r.status_code == 400 and "Chambre noire" in r.json()["detail"]
+    main.m().cfg.jeton_chambre_noire = "j"
+    r = client.put("/api/reglages", json={"tag_prefixe": ""})
+    assert r.status_code == 200 and r.json()["reglages"]["tag_prefixe"] == ""
+    main.m().cfg.jeton_chambre_noire = ""
 
 
 def test_2100_libelles_suivis(env):
@@ -962,7 +942,7 @@ def test_2100_libelles_suivis(env):
     client.post("/api/synchroniser")
     total = client.get("/api/accueil").json()["compteurs"]["total"]
     lib = client.get("/api/sources").json()["libelles"]
-    assert [(l["libelle"], l["actuel"], l["origine"]) for l in lib] == [("Numérisation", True, "stack")] and lib[0]["photos"] > 0
+    assert [(l["libelle"], l["actuel"], l["origine"]) for l in lib] == [("Numérisation", True, "reglages")] and lib[0]["photos"] > 0
     assert client.post("/api/libelles", json={"libelle": "A/B"}).status_code == 400
     r = client.post("/api/libelles", json={"libelle": "Vieux lot"})
     assert r.status_code == 200 and [l["libelle"] for l in r.json()["libelles"]] == ["Numérisation", "Vieux lot"]
@@ -988,7 +968,7 @@ def test_2100_libelles_suivis(env):
 
 def _env_minimal(monkeypatch, tmp_path):
     for v in ("MILLESIME_PASSWORD", "MILLESIME_LECTURE_SEULE", "MILLESIME_JETON_TRANSHUMANCE",
-              "MILLESIME_JETON_CHAMBRE_NOIRE", "MILLESIME_IMMICH_LIEN"):
+              "MILLESIME_JETON_CHAMBRE_NOIRE", "MILLESIME_IMMICH_LIEN", "MILLESIME_JETON_CARNET"):
         monkeypatch.delenv(v, raising=False)
     monkeypatch.setenv("MILLESIME_IMMICH_CLE", "x")
     monkeypatch.setenv("MILLESIME_ETAT", str(tmp_path))
@@ -997,25 +977,30 @@ def _env_minimal(monkeypatch, tmp_path):
 
 def test_2110_module_maison_non_retouche():
     from app import maison
-    assert maison.CONTRAT == 1
+    assert maison.CONTRAT == 2 and maison.CONTRAT_SAUVEGARDE == 1
     assert maison.empreinte_calculee() == maison.empreinte_ecrite()
 
 
-def test_2110_mot_de_passe_commun_puis_repli(monkeypatch, tmp_path):
+def test_2120_mot_de_passe_commun_seul(monkeypatch, tmp_path):
+    """2.12.0 : MAISON_PASSWORD seul ; l'ancien nom seul ne suffit plus : refus de démarrer."""
     from app.config import Config
     _env_minimal(monkeypatch, tmp_path)
-    with pytest.raises(RuntimeError, match="MAISON_PASSWORD \\(ou MILLESIME_PASSWORD\\)"):
+    with pytest.raises(RuntimeError, match="MAISON_PASSWORD est absent ou trop court"):
         Config.depuis_env()
-    monkeypatch.setenv("MILLESIME_PASSWORD", "ancien")
-    assert Config.depuis_env().mot_de_passe == "ancien"                 # repli : l'ancien nom
-    monkeypatch.setenv("MAISON_PASSWORD", "commun")
-    assert Config.depuis_env().mot_de_passe == "commun"                 # le commun passe devant
+    monkeypatch.setenv("MILLESIME_PASSWORD", "ancien-mot-de-passe")
+    with pytest.raises(RuntimeError, match="MAISON_PASSWORD est absent ou trop court"):
+        Config.depuis_env()
+    monkeypatch.setenv("MAISON_PASSWORD", "court")
+    with pytest.raises(RuntimeError, match="trop court"):
+        Config.depuis_env()
+    monkeypatch.setenv("MAISON_PASSWORD", MDP)
+    assert Config.depuis_env().mot_de_passe == MDP
 
 
 def test_2110_lecture_seule_maison_et_forcage(monkeypatch, tmp_path):
     from app.config import Config
     _env_minimal(monkeypatch, tmp_path)
-    monkeypatch.setenv("MAISON_PASSWORD", "commun")
+    monkeypatch.setenv("MAISON_PASSWORD", MDP)
     c = Config.depuis_env()
     assert not c.lecture_seule and c.lecture_seule_origine == ""
     monkeypatch.setenv("MAISON_LECTURE_SEULE", "oui")
@@ -1041,16 +1026,15 @@ def test_2110_lecture_seule_maison_dite_a_l_ecran(env, monkeypatch):
     assert r.status_code == 409 and "MAISON_LECTURE_SEULE" in r.json()["detail"]
 
 
-def test_2110_portes_a_jeton(env, monkeypatch):
-    """/api/etat (carnet) s'ouvre avec MAISON_JETON et toujours avec l'ancien ; HA et le PC gardent les leurs."""
+def test_2120_portes_a_jeton(env, monkeypatch):
+    """/api/etat (carnet) : MAISON_JETON seul ; l'ancien jeton de carnet n'ouvre plus ; HA et le PC gardent les leurs."""
     client, _ = env
-    commun = {"Authorization": "Bearer jeton-commun"}
-    assert client.get("/api/etat", headers=commun).status_code == 401           # pas encore dans la stack
-    monkeypatch.setenv("MAISON_JETON", "jeton-commun")
+    monkeypatch.setenv("MILLESIME_JETON_CARNET", "ancien-jeton-carnet")
+    commun = {"Authorization": f"Bearer {JK}"}
     assert client.get("/api/etat", headers=commun).status_code == 200
-    assert client.get("/api/etat", headers={"X-Maison-Jeton": "jeton-commun"}).status_code == 200
-    assert client.get("/api/etat", headers={"Authorization": f"Bearer {JK}"}).status_code == 200   # l'ancien
-    monkeypatch.setenv("MAISON_JETON_ANCIEN", "jeton-d-avant")
+    assert client.get("/api/etat", headers={"X-Maison-Jeton": JK}).status_code == 200
+    assert client.get("/api/etat", headers={"Authorization": "Bearer ancien-jeton-carnet"}).status_code == 401
+    monkeypatch.setenv("MAISON_JETON_ANCIEN", "jeton-d-avant")              # changement de jeton commun
     assert client.get("/api/etat", headers={"Authorization": "Bearer jeton-d-avant"}).status_code == 200
     assert client.get("/api/etat", headers={"Authorization": "Bearer faux"}).status_code == 401
     assert client.get("/api/etat").status_code == 401
@@ -1058,32 +1042,28 @@ def test_2110_portes_a_jeton(env, monkeypatch):
     assert client.get("/ha/etat", headers=commun).status_code == 401
     assert client.get("/ha/etat", headers={"Authorization": f"Bearer {JH}"}).status_code == 200
     assert client.get("/api/calcul/taches", headers=commun).status_code == 401
-    # sans aucun jeton dans la stack : porte fermée, même avec un en-tête vide
-    from app import main
-    main.m().cfg.jeton_carnet = ""
+    assert client.get("/externe/sauvegarde", headers={"Authorization": f"Bearer {JH}"}).status_code == 401
+    assert client.get("/externe/sauvegarde", headers={"Authorization": f"Bearer {JC}"}).status_code == 401
+    # MAISON_JETON vide : portes fermées, même avec un en-tête vide
     monkeypatch.delenv("MAISON_JETON")
     monkeypatch.delenv("MAISON_JETON_ANCIEN")
     assert client.get("/api/etat", headers={"Authorization": "Bearer "}).status_code == 401
+    assert client.get("/api/etat", headers=commun).status_code == 401
+    assert client.get("/externe/sauvegarde", headers=commun).status_code == 404
 
 
-def test_2110_jetons_envoyes(monkeypatch, tmp_path):
-    """Transhumance et Chambre noire : l'ancien jeton de la paire d'abord, puis MAISON_JETON."""
+def test_2120_jetons_envoyes(monkeypatch, tmp_path):
+    """Transhumance et Chambre noire : MAISON_JETON seul ; les anciens jetons par paire ne sont plus lus."""
     from app.config import Config
     _env_minimal(monkeypatch, tmp_path)
-    monkeypatch.setenv("MAISON_PASSWORD", "commun")
+    monkeypatch.setenv("MAISON_PASSWORD", MDP)
+    monkeypatch.setenv("MILLESIME_JETON_TRANSHUMANCE", "jeton-tr")
+    monkeypatch.setenv("MILLESIME_JETON_CHAMBRE_NOIRE", "jeton-cn")
     c = Config.depuis_env()
     assert c.jeton_transhumance == "" and c.jeton_chambre_noire == ""
     monkeypatch.setenv("MAISON_JETON", "jeton-commun")
     c = Config.depuis_env()
     assert c.jeton_transhumance == "jeton-commun" and c.jeton_chambre_noire == "jeton-commun"
-    monkeypatch.setenv("MILLESIME_JETON_TRANSHUMANCE", "jeton-tr")
-    monkeypatch.setenv("MILLESIME_JETON_CHAMBRE_NOIRE", "jeton-cn")
-    c = Config.depuis_env()
-    assert c.jeton_transhumance == "jeton-tr" and c.jeton_chambre_noire == "jeton-cn"
-    # relié à Chambre noire par le seul jeton commun : le préfixe de la stack reste facultatif
-    monkeypatch.delenv("MILLESIME_JETON_CHAMBRE_NOIRE")
-    monkeypatch.delenv("MILLESIME_TAG_PREFIXE")
-    assert Config.depuis_env().tag_prefixe == ""
 
 
 def test_2110_adresse_d_immich_par_l_annuaire(env, monkeypatch):
@@ -1099,11 +1079,186 @@ def test_2110_adresse_d_immich_par_l_annuaire(env, monkeypatch):
     assert s["lien_immich"] == "https://immich.exemple.ts.net/photos/nd-sans"
     assert all(g["lien_immich"].startswith("http://nas.lan:2283/people/") for g in client.get("/api/nommer").json()["groupes"])
 
-    # Anneau injoignable : l'ancienne variable, puis le chemin seul (le navigateur complète)
+    # Anneau injoignable : le chemin seul (le navigateur complète : même machine, port 2283) ;
+    # 2.12.0 : MILLESIME_IMMICH_LIEN n'est plus lu
     def injoignable():
         raise OSError("pas d'Anneau")
     monkeypatch.setattr(main, "ANNUAIRE", maison.Annuaire(jeton="j", lire=injoignable))
-    main.m().cfg.immich_lien = "http://repli:2283"
-    assert client.get("/api/scans/nd-sans").json()["lien_immich"] == "http://repli:2283/photos/nd-sans"
-    main.m().cfg.immich_lien = ""
+    monkeypatch.setenv("MILLESIME_IMMICH_LIEN", "http://repli:2283")
     assert client.get("/api/scans/nd-sans").json()["lien_immich"] == "/photos/nd-sans"
+    assert all(g["lien_immich"].startswith("/people/") for g in client.get("/api/nommer").json()["groupes"])
+
+
+# ---------------------------------------------------------------- 2.12.0 : réglages dans l'appli, sauvegarde, restauration
+
+def test_2120_reprise_au_premier_demarrage_puis_variable_ignoree(monkeypatch, tmp_path):
+    """Les anciennes variables donnent la valeur de départ une seule fois (ligne au journal), puis ne sont plus lues."""
+    from app.config import Config
+    from app.service import Millesime
+    _env_minimal(monkeypatch, tmp_path)
+    monkeypatch.setenv("MAISON_PASSWORD", MDP)
+    monkeypatch.setenv("MILLESIME_SYNCHRO_MINUTES", "30")
+    m = Millesime(Config.depuis_env())
+    assert m.reglages() == {"tag_prefixe": "Numérisation", "synchro_minutes": 30,
+                            "album_non_datees": "Non datées Numérisation", "modele_album": "{annee} Numérisation",
+                            "libelles": []}
+    assert sorted(m.repris) == ["album_non_datees", "modele_album", "synchro_minutes", "tag_prefixe"]
+    j = m.journal()
+    assert {l["apres"]["cle"] for l in j if l["action"] == "reglage_repris"} == set(m.repris)
+    assert next(l for l in j if l["apres"]["cle"] == "synchro_minutes")["avant"] == {"variable": "MILLESIME_SYNCHRO_MINUTES"}
+    m.base.cx.close()
+    # Second démarrage : la stack a changé, les réglages non
+    monkeypatch.setenv("MILLESIME_TAG_PREFIXE", "Autre")
+    monkeypatch.setenv("MILLESIME_SYNCHRO_MINUTES", "15")
+    monkeypatch.delenv("MILLESIME_MODELE_ALBUM")
+    m2 = Millesime(Config.depuis_env())
+    assert m2.repris == [] and m2.reglages()["tag_prefixe"] == "Numérisation" and m2.synchro_minutes == 30
+    assert m2.modele_album == "{annee} Numérisation"
+    assert len([l for l in m2.journal() if l["action"] == "reglage_repris"]) == 4
+    m2.base.cx.close()
+
+
+def test_2120_reprise_d_une_valeur_fausse(monkeypatch, tmp_path):
+    from app.config import Config
+    from app.service import Millesime
+    _env_minimal(monkeypatch, tmp_path)
+    monkeypatch.setenv("MAISON_PASSWORD", MDP)
+    monkeypatch.setenv("MILLESIME_SYNCHRO_MINUTES", "souvent")
+    monkeypatch.setenv("MILLESIME_MODELE_ALBUM", "Sans année")
+    m = Millesime(Config.depuis_env())
+    assert m.synchro_minutes == 60 and m.modele_album == ""                 # valeur par défaut, rien de repris
+    assert "synchro_minutes" not in m.repris and "modele_album" not in m.repris
+    m.base.cx.close()
+
+
+def test_2120_put_reglages_et_mauvais_types(env):
+    client, _ = env
+    assert client.get("/api/reglages").status_code == 401                   # session requise
+    assert client.put("/api/reglages", json={"synchro_minutes": 10}).status_code == 401
+    connecter(client)
+    from app import main
+    m = main.m()
+    r = client.get("/api/reglages").json()
+    assert r["reglages"]["tag_prefixe"] == "Numérisation" and r["reglages"]["synchro_minutes"] == 60
+    m.reveil.clear()
+    r = client.put("/api/reglages", json={"synchro_minutes": 15, "tag_prefixe": " Numérisation "})
+    assert r.status_code == 200 and r.json()["reglages"]["synchro_minutes"] == 15
+    assert m.synchro_minutes == 15 and m.reveil.is_set()                    # la boucle recalcule son attente sans redémarrer
+    assert client.get("/api/accueil").json()["synchro_minutes"] == 15
+    for corps, mot in (({"synchro_minutes": "beaucoup"}, "entier"), ({"synchro_minutes": True}, "entier"),
+                       ({"synchro_minutes": 2}, "entre 5"), ({"tag_prefixe": 12}, "texte"),
+                       ({"tag_prefixe": "A/B"}, "/"), ({"modele_album": "Sans année"}, "{annee}"),
+                       ({"libelles": "x"}, "liste"), ({"inconnu": 1}, "inconnu"),
+                       ({"synchro_minutes": 30, "album_non_datees": ["x"]}, "texte")):
+        r = client.put("/api/reglages", json=corps)
+        assert r.status_code == 400 and mot in r.json()["detail"], (corps, r.json())
+    assert m.synchro_minutes == 15                                          # rien n'a changé (tout est vérifié avant)
+    # Libellés suivis par les réglages : un ancien libellé ajouté, l'actuel remis de lui-même
+    r = client.put("/api/reglages", json={"libelles": ["Vieux lot"]}).json()["reglages"]
+    assert [l["libelle"] for l in r["libelles"]] == ["Vieux lot"]
+    assert {l["libelle"] for l in client.get("/api/sources").json()["libelles"]} == {"Vieux lot", "Numérisation"}
+    # Lecture seule : les réglages restent modifiables (rien n'est écrit dans Immich)
+    m.cfg.lecture_seule = True
+    assert client.put("/api/reglages", json={"album_non_datees": "Sans date"}).status_code == 200
+    m.cfg.lecture_seule = False
+
+
+def test_2120_externe_sauvegarde(env, monkeypatch):
+    client, _ = env
+    assert client.get("/externe/sauvegarde").status_code == 401
+    assert client.get("/externe/sauvegarde", headers={"Authorization": "Bearer faux"}).status_code == 401
+    r = client.get("/externe/sauvegarde", headers={"Authorization": f"Bearer {JK}"})
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    s = r.json()
+    from app import __version__
+    from app.service import EXCLUS_SAUVEGARDE
+    assert s["contrat"] == 1 and s["appli"] == "millesime" and s["version"] == __version__
+    assert set(s["reglages"]) == {"tag_prefixe", "synchro_minutes", "album_non_datees", "modele_album", "libelles"}
+    assert s["reglages"]["tag_prefixe"] == "Numérisation"
+    texte = r.text
+    for secret in (MDP, JK, JC, JH, "MAISON_", "MILLESIME_", "/state", "immich_server"):
+        assert secret not in texte
+    assert not set(EXCLUS_SAUVEGARDE) & set(s["reglages"])
+    # sans session : la porte /externe/ ne passe pas par la connexion, et /health reste public
+    assert client.get("/health").json()["ok"] is True
+
+
+class FauxAnneau:
+    """Faux Anneau pour lire_sauvegarde : deux sauvegardes."""
+    def __init__(self):
+        self.panne = None
+        self.appels = []
+        self.sauvegardes = {
+            "2026-11-15": {"le": "2026-11-15T03:00:00+01:00", "version": "2.12.0",
+                           "reglages": {"tag_prefixe": "Numérisation", "synchro_minutes": 120,
+                                        "album_non_datees": "Non datées Numérisation", "modele_album": "Scans {annee}",
+                                        "libelles": [{"libelle": "Vieux lot", "tag_non_datee": "Vieux lot/Non datée",
+                                                      "album_non_datees": "Non datées Vieux lot"}],
+                                        "jeton_secret": "ne-doit-pas-passer", "session_generation": 9}},
+            "2026-11-14": {"le": "2026-11-14T03:00:00+01:00", "version": "2.12.0",
+                           "reglages": {"tag_prefixe": "Numérisation", "synchro_minutes": 60,
+                                        "album_non_datees": "Non datées Numérisation",
+                                        "modele_album": "{annee} Numérisation", "libelles": []}}}
+
+    def __call__(self, adresse, jeton):
+        import urllib.error
+        self.appels.append((adresse, jeton))
+        if self.panne == "reseau":
+            raise OSError("Anneau éteint")
+        if self.panne == "rien":
+            raise urllib.error.HTTPError(adresse, 404, "Not Found", {}, None)
+        if "?le=" in adresse:
+            le = adresse.split("?le=")[1]
+            if le not in self.sauvegardes:
+                raise urllib.error.HTTPError(adresse, 404, "Not Found", {}, None)
+            return self.sauvegardes[le]
+        return {"dates": sorted(self.sauvegardes, reverse=True)}
+
+
+def test_2120_restaurer(env, monkeypatch):
+    client, _ = env
+    from app import main
+    anneau = FauxAnneau()
+    monkeypatch.setattr(main, "LIRE_SAUVEGARDE", anneau)
+    assert client.get("/api/restaurer").status_code == 401                  # session requise
+    connecter(client)
+    client.post("/api/synchroniser")
+    assert client.get("/api/restaurer").json() == {"dates": ["2026-11-15", "2026-11-14"]}
+    assert anneau.appels[-1] == ("http://anneau:8094/externe/sauvegardes/millesime", JK)
+    r = client.get("/api/restaurer?le=2026-11-15").json()
+    assert r["version"] == "2.12.0"
+    diff = {d["cle"]: (d["actuel"], d["sauve"]) for d in r["differences"]}
+    assert set(diff) == {"synchro_minutes", "modele_album", "libelles"}     # ni secret ni clé exclue
+    assert diff["synchro_minutes"] == (60, 120)
+    assert client.get("/api/restaurer?le=2026-11-14").json()["differences"] == []   # le libellé actuel n'est pas sauvegardé
+    # Application (permise en lecture seule : réglages internes seulement)
+    main.m().cfg.lecture_seule = True
+    r = client.post("/api/restaurer", json={"le": "2026-11-15"})
+    main.m().cfg.lecture_seule = False
+    assert r.status_code == 200 and sorted(r.json()["appliquees"]) == ["libelles", "modele_album", "synchro_minutes"]
+    reg = client.get("/api/reglages").json()["reglages"]
+    assert reg["synchro_minutes"] == 120 and reg["modele_album"] == "Scans {annee}"
+    assert [l["libelle"] for l in reg["libelles"]] == ["Vieux lot"]
+    assert {l["libelle"] for l in client.get("/api/sources").json()["libelles"]} == {"Numérisation", "Vieux lot"}
+    assert "jeton_secret" not in reg and main.m().base.lire("session_generation", 0) != 9
+    j = client.get("/api/journal").json()[0]
+    assert j["action"] == "reglages_restaures" and j["apres"]["le"] == "2026-11-15" and j["avant"]["synchro_minutes"] == 60
+    assert client.post(f"/api/journal/{j['id']}/annuler").status_code == 400  # un réglage ne s'annule pas par le journal
+    assert client.get("/api/restaurer?le=2026-11-15").json()["differences"] == []
+    assert "Rien à changer" in client.post("/api/restaurer", json={"le": "2026-11-15"}).json()["message"]
+    assert client.post("/api/restaurer", json={}).status_code == 400
+    # Rien à cette date, rien du tout, Anneau injoignable : messages clairs
+    r = client.get("/api/restaurer?le=2020-01-01")
+    assert r.status_code == 404 and "aucune sauvegarde" in r.json()["detail"]
+    anneau.panne = "rien"
+    r = client.get("/api/restaurer")
+    assert r.status_code == 404 and "aucune sauvegarde" in r.json()["detail"]
+    anneau.panne = "reseau"
+    for r in (client.get("/api/restaurer"), client.get("/api/restaurer?le=2026-11-14"),
+              client.post("/api/restaurer", json={"le": "2026-11-14"})):
+        assert r.status_code == 503 and "injoignable" in r.json()["detail"]
+    assert client.get("/api/reglages").json()["reglages"]["synchro_minutes"] == 120
+    anneau.panne = None
+    anneau.sauvegardes = {}
+    r = client.get("/api/restaurer")
+    assert r.status_code == 404 and "aucune sauvegarde" in r.json()["detail"]

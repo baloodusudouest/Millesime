@@ -2,7 +2,7 @@
 
     python -m tests.interface.serveur <dossier d'état> <port>
 
-Mot de passe : « essai ». Rien ne sort de la machine."""
+Mot de passe : « essai-essai-essai ». Rien ne sort de la machine (l'Anneau est faux : deux sauvegardes de réglages)."""
 from __future__ import annotations
 
 import os
@@ -18,7 +18,21 @@ import uvicorn
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import faux_immich_app as faux  # noqa: E402
 
-MDP, JETON = "essai", "jeton-calcul"
+MDP, JETON = "essai-essai-essai", "jeton-calcul"
+
+
+def faux_anneau(adresse: str, jeton: str) -> dict:
+    """2.12.0 : « Restaurer les réglages » sans Anneau : deux sauvegardes, dont une qui diffère."""
+    base = {"tag_prefixe": "Numérisation", "synchro_minutes": 60, "album_non_datees": "Non datées Numérisation",
+            "modele_album": "{annee} Numérisation", "libelles": []}
+    sauvegardes = {"2026-11-15": {**base, "synchro_minutes": 120, "modele_album": "Scans de {annee}",
+                                  "libelles": [{"libelle": "Ancien lot de numérisation", "tag_non_datee": "Ancien lot de numérisation/Non datée",
+                                                "album_non_datees": "Non datées Ancien lot de numérisation"}]},
+                   "2026-11-14": base}
+    if "?le=" in adresse:
+        le = adresse.split("?le=")[1]
+        return {"le": le + "T03:00:00+01:00", "version": "2.12.0", "reglages": sauvegardes[le]}
+    return {"dates": sorted(sauvegardes, reverse=True)}
 
 
 def calculer(base: str, E: dict) -> None:
@@ -39,12 +53,13 @@ def main() -> None:
     dossier, port = Path(sys.argv[1]), int(sys.argv[2])
     _, url, E = faux.demarrer()
     os.environ.update({
-        "MILLESIME_IMMICH_URL": url, "MILLESIME_IMMICH_CLE": faux.CLE, "MILLESIME_PASSWORD": MDP,
-        "MILLESIME_JETON_CALCUL": JETON, "MILLESIME_JETON_CARNET": "jeton-carnet", "MILLESIME_ETAT": str(dossier),
+        "MILLESIME_IMMICH_URL": url, "MILLESIME_IMMICH_CLE": faux.CLE, "MAISON_PASSWORD": MDP,
+        "MILLESIME_JETON_CALCUL": JETON, "MILLESIME_ETAT": str(dossier),
         "MILLESIME_TAG_PREFIXE": "Numérisation", "MILLESIME_ALBUM_NON_DATEES": "Non datées Numérisation",
         "MILLESIME_MODELE_ALBUM": "{annee} Numérisation"})
     from app import main as appli
     appli.ETAT["synchro_auto"] = False
+    appli.LIRE_SAUVEGARDE = faux_anneau
     serveur = uvicorn.Server(uvicorn.Config(appli.app, host="127.0.0.1", port=port, log_level="warning"))
     threading.Thread(target=serveur.run, daemon=True).start()
     base = f"http://127.0.0.1:{port}"

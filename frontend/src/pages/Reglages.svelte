@@ -1,9 +1,14 @@
 <script>
   // 2.0 : « Réglages », ce qui n'est pas un service : précision de l'indice, journal, déconnexion.
+  // 2.12.0 : réglages d'usage (Lecture d'Immich, albums, libellés suivis) et « Restaurer les réglages ».
   import { api, pluriel, session } from '../lib/api.svelte.js'
   import Journal from './Journal.svelte'
+  import LectureImmich from './LectureImmich.svelte'
+  import Restaurer from './Restaurer.svelte'
   import Sources from './Sources.svelte'
   let { deconnecter } = $props()
+  let restaure = $state(0)        // après une restauration : toutes les tuiles de réglages se relisent
+  let enregistre = $state(0)      // après « Lecture d'Immich » : les sources, les libellés et le journal se relisent
   let a = $state(null)
   api.get('/api/accueil').then((r) => (a = r)).catch(() => {})
 </script>
@@ -29,9 +34,12 @@
   {/if}
 </section>
 
-<Sources />
+{#key restaure}<LectureImmich change={() => (enregistre += 1)} />{/key}
+{#key `${restaure}-${enregistre}`}<Sources />{/key}
 
-<section class="surface mt-4 p-4"><Journal integre /></section>
+<Restaurer change={() => (restaure += 1)} />
+
+{#key `${restaure}-${enregistre}`}<section class="surface mt-4 p-4"><Journal integre /></section>{/key}
 
 <p class="secondaire mt-6 flex flex-wrap items-center justify-between gap-3 text-sm">
   <span>Millésime {session.version}</span>

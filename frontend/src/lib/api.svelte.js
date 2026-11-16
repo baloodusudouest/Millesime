@@ -20,14 +20,15 @@ async function appel(methode, chemin, corps) {
 export const api = {
   get: (c) => appel('GET', c),
   post: (c, corps = {}) => appel('POST', c, corps),
+  put: (c, corps = {}) => appel('PUT', c, corps),
 }
 
 export const visage = (asset, face) => `/api/visage/${asset}/${face}`
 export const apercu = (asset) => `/api/apercu/${asset}`
 
 // Lien vers Immich ouvert dans le navigateur. Le serveur renvoie une adresse complète si l'Anneau la connaît
-// (tuile « Immich », 2.11.0) ou si MILLESIME_IMMICH_LIEN est défini, sinon un chemin (/photos/…) : Immich est alors cherché sur
-// la même machine que Millésime (192.0.2.10, nom Tailscale…), port 2283.
+// (tuile « Immich », 2.11.0), sinon un chemin (/photos/…) : Immich est alors cherché sur la même machine que
+// Millésime (adresse locale, nom Tailscale…), port 2283.
 export function versImmich(lien) {
   if (!lien || !lien.startsWith('/')) return lien
   return `http://${location.hostname}:2283${lien}`

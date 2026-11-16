@@ -63,7 +63,7 @@
       (<a class="lien" href="#reglages">Réglages</a>) et peut s'annuler.</p>
     <p class="mt-3 text-sm">
       {#if a?.derniere_synchro}Dernière relecture : {dateCourte(a.derniere_synchro.le)}, {pluriel(a.derniere_synchro.scans, 'scan')} relus.{:else}Jamais relu.{/if}
-      <span class="secondaire">Elle se refait toute seule chaque heure, et toutes les 15 min quand le PC est disponible.</span>
+      <span class="secondaire">Elle se refait toute seule {a?.synchro_minutes && a.synchro_minutes !== 60 ? `toutes les ${a.synchro_minutes} min` : 'chaque heure'} (<a class="lien" href="#reglages">Réglages</a>), et toutes les 15 min quand le PC est disponible.</span>
     </p>
     <p class="mt-3 flex flex-wrap gap-2">
       <button class="bouton bouton-principal" onclick={synchroniser} disabled={synchro}>{synchro ? 'Synchronisation…' : 'Synchroniser maintenant'}</button>
@@ -102,8 +102,8 @@
     <p class="secondaire mt-1 text-sm">Chambre noire envoie les photos numérisées dans Immich. À chaque relecture d'Immich, Millésime y lit le libellé,
       le tag et l'album des non datées réglés dans ses Réglages, et les suit. Millésime n'écrit rien dans Chambre noire.</p>
     {#if !a?.chambre_noire?.relie}
-      <p class="mt-3 text-sm">Non reliée : pose le jeton commun <code>MAISON_JETON</code> dans la stack (ou <code>MILLESIME_JETON_CHAMBRE_NOIRE</code>, même valeur que <code>CHAMBRE_NOIRE_JETON_MILLESIME</code>).
-        En attendant, les noms viennent de la stack et de <a class="lien" href="#reglages">Réglages</a>.</p>
+      <p class="mt-3 text-sm">Non reliée : pose le jeton commun <code>MAISON_JETON</code> dans la stack.
+        En attendant, les noms viennent de <a class="lien" href="#reglages">Réglages</a>.</p>
     {:else}
       {#if a.chambre_noire.noms}
         <dl class="mt-3 grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[10rem_1fr]">

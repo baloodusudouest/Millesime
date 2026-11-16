@@ -51,7 +51,7 @@ def page(request, navigateur, adresse):
     erreurs = []
     pg.on("pageerror", lambda e: erreurs.append(str(e)))
     pg.goto(adresse)
-    pg.get_by_label(re.compile("Mot de passe")).fill("essai")
+    pg.get_by_label(re.compile("Mot de passe")).fill("essai-essai-essai")
     pg.get_by_role("button", name="Se connecter").click()
     pg.wait_for_selector("main")
     yield pg
@@ -133,7 +133,7 @@ def test_20_connexion_par_service_et_reglages(page):
     page.get_by_role("heading", name="Journal").wait_for()
     assert page.get_by_role("heading", name="Précision de l'indice").count() == 1
     page.goto(page.url.split("#")[0] + "#journal")                                     # ancienne adresse : mène à Réglages
-    page.get_by_role("heading", name="Réglages").wait_for()
+    page.get_by_role("heading", name="Réglages", exact=True).wait_for()
     page.get_by_role("button", name="Se déconnecter").click()
     page.get_by_role("button", name="Se connecter").wait_for()
 
@@ -261,3 +261,35 @@ def test_270_plusieurs_dossiers_coches(page):
     sel.get_by_role("button", name=re.compile("Confirmer : dater les 2 photos")).wait_for()
     sel.get_by_role("button", name="Tout décocher").click()
     assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
+
+
+# ------------------------------------------------------------------ 2.12.0 : réglages dans l'appli, restauration
+
+def test_2120_reglages_lecture_d_immich_et_restaurer(page):
+    aller(page, "Réglages")
+    lecture = page.locator("section[aria-labelledby='titre-lecture']")
+    lecture.get_by_label("Libellé des numérisations").wait_for()
+    assert lecture.get_by_label("Libellé des numérisations").input_value() == "Numérisation"
+    minutes = lecture.get_by_label(re.compile("Relire Immich"))
+    assert minutes.input_value() == "60"
+    enregistrer = lecture.get_by_role("button", name="Enregistrer")
+    assert enregistrer.is_disabled()
+    minutes.fill("2")                                                                   # hors bornes : message clair
+    enregistrer.click()
+    lecture.get_by_role("alert").wait_for()
+    assert "entre 5" in lecture.get_by_role("alert").inner_text()
+    minutes.fill("60")
+    # Restaurer : dates lues chez l'Anneau, différences (actuel → sauvegardé), puis on garde l'actuel
+    restaurer = page.locator("section[aria-labelledby='titre-restaurer']")
+    restaurer.get_by_role("button", name="Voir les sauvegardes").click()
+    restaurer.get_by_label("Sauvegarde du").wait_for()
+    assert restaurer.get_by_label("Sauvegarde du").locator("option").count() == 2
+    restaurer.get_by_role("button", name="Voir les différences").click()
+    diff = restaurer.get_by_label("Différences avec la sauvegarde")
+    diff.wait_for()
+    texte = diff.inner_text()
+    assert "Relecture d'Immich" in texte and "60" in texte and "120" in texte and "Ancien lot de numérisation" in texte
+    assert restaurer.get_by_role("button", name=re.compile(r"^Restaurer \d réglages?$")).is_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
+    restaurer.get_by_role("button", name="Garder les réglages actuels").click()
+    assert diff.count() == 0

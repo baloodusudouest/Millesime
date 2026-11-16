@@ -11,18 +11,24 @@
     erreur = ''
     try { await api.post(`/api/journal/${j.id}/annuler`); await charger() } catch (e) { erreur = e.message }
   }
+  const NOMS = { tag_prefixe: 'libellé des numérisations', synchro_minutes: 'relecture d\'Immich',
+                 album_non_datees: 'album des non datés', modele_album: 'album par année', libelles: 'libellés suivis' }
+  const REGLAGE = ['reglage_repris', 'reglages_restaures']
   function libelle(j) {
     if (j.action === 'valider') return `Datée ${j.apres.tag?.split('/').pop() ?? ''}, album « ${j.apres.album} »`
     if (j.action === 'plusieurs') return 'Mise de côté : plusieurs années'
     if (j.action === 'nommer') return `Groupe de visages nommé « ${j.apres.nom} »`
     if (j.action === 'detacher') return `Visage retiré de ${j.avant.nom || 'la personne'} (ce n'était pas elle)`
     if (j.action === 'fusionner') return `${j.avant.faces?.length ?? 0} visages rattachés à ${j.apres.cible_nom}`
+    if (j.action === 'reglage_repris') return `Réglage « ${NOMS[j.apres.cle] ?? j.apres.cle} » repris de la stack (${j.avant.variable})`
+    if (j.action === 'reglages_restaures') return `Réglages restaurés depuis la sauvegarde du ${j.apres.le} (${j.apres.cles?.length ?? 0})`
     return j.action
   }
 </script>
 
 {#if integre}<h2 class="text-lg font-semibold">Journal</h2>{:else}<h1 class="titre-page">Journal</h1>{/if}
-<p class="secondaire mt-2">Chaque écriture dans Immich, avec ce qu'il y avait avant. Annuler remet la date, le tag et l'album d'origine.</p>
+<p class="secondaire mt-2">Chaque écriture dans Immich, avec ce qu'il y avait avant. Annuler remet la date, le tag et l'album d'origine.
+  Les réglages repris ou restaurés y sont notés aussi.</p>
 {#if erreur}<p class="mt-3 text-alerte" role="alert">{erreur}</p>{/if}
 
 {#if liste && liste.length === 0}
@@ -38,7 +44,7 @@
           <p class="truncate">{libelle(j)}</p>
           <p class="secondaire text-sm">{dateCourte(j.le)}{j.annule_le ? ` · annulée le ${dateCourte(j.annule_le)}` : ''}{j.apres.erreur ? ' · écriture interrompue' : ''}</p>
         </div>
-        {#if !j.annule_le}
+        {#if !j.annule_le && !REGLAGE.includes(j.action)}
           <button class="bouton" onclick={() => annuler(j)}>Annuler</button>
         {/if}
       </li>

@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import logging
+import os
 import re
 import threading
 from collections import OrderedDict
@@ -13,8 +14,9 @@ from datetime import datetime
 from PIL import Image
 
 from . import estimation as est
+from . import maison
 from .base import Base
-from .config import Config
+from .config import REPRISES, Config
 from .immich import ErreurImmich, Immich
 
 log = logging.getLogger("millesime")
@@ -191,6 +193,74 @@ class Cache(OrderedDict):
         return val
 
 
+# ---------------------------------------------------------------- réglages d'usage (2.12.0)
+REGLAGES_DEFAUTS = {
+    "tag_prefixe": "",            # libellé des numérisations (préfixe des tags) ; facultatif si Chambre noire est reliée
+    "synchro_minutes": 60,        # relecture d'Immich, en minutes (5 à 1440)
+    "album_non_datees": "",       # album des scans tagués non datés (2.2.0)
+    "modele_album": "",           # album par année, doit contenir {annee} (2.2.0)
+    "libelles": [],               # libellés suivis (2.10.0)
+}
+CLES_LIBELLE = ("libelle", "tag_non_datee", "album_non_datees")
+ACTIONS_REGLAGES = ("reglage_repris", "reglages_restaures")
+# Clés de la table `reglages` qui ne sont pas des réglages d'usage et ne sortent jamais de Millésime
+EXCLUS_SAUVEGARDE = ("session_generation", "chambre_noire_noms", "chambre_noire_erreur", "derniere_synchro",
+                     "dernier_calcul", "carnet_vu", "ha_vu")
+
+
+def _valider_reglage(cle: str, valeur, relie: bool = True, tag_nd: str = "Non datée", libre: bool = False):
+    """Vérifie un réglage et rend sa valeur propre ; ErreurMillesime (message clair) sinon.
+    `libre` : reprise depuis une ancienne variable, sans exiger ce qu'elle n'exigeait pas."""
+    def texte(v, nom):
+        if not isinstance(v, str):
+            raise ErreurMillesime(f"Réglage « {nom} » : texte attendu.")
+        v = v.strip()
+        if len(v) > 120:
+            raise ErreurMillesime(f"Réglage « {nom} » : 120 caractères au plus.")
+        return v
+    if cle == "tag_prefixe":
+        v = texte(valeur, cle)
+        if "/" in v:
+            raise ErreurMillesime("Réglage « tag_prefixe » : pas de « / » (il sépare les niveaux du tag).")
+        if not v and not relie and not libre:
+            raise ErreurMillesime("Réglage « tag_prefixe » : à remplir tant que Chambre noire n'est pas reliée.")
+        return v
+    if cle == "synchro_minutes":
+        if isinstance(valeur, bool) or not isinstance(valeur, int):
+            raise ErreurMillesime("Réglage « synchro_minutes » : nombre entier de minutes attendu.")
+        if not 5 <= valeur <= 1440:
+            raise ErreurMillesime("Réglage « synchro_minutes » : entre 5 et 1440 minutes.")
+        return valeur
+    if cle == "album_non_datees":
+        return texte(valeur, cle)
+    if cle == "modele_album":
+        v = texte(valeur, cle)
+        if v and "{annee}" not in v:
+            raise ErreurMillesime("Réglage « modele_album » : doit contenir {annee}, par exemple « {annee} Numérisation ».")
+        return v
+    if cle == "libelles":
+        if not isinstance(valeur, list):
+            raise ErreurMillesime("Réglage « libelles » : liste attendue.")
+        propres, vus = [], set()
+        for x in valeur:
+            if isinstance(x, str):
+                x = {"libelle": x}
+            if not isinstance(x, dict) or not isinstance(x.get("libelle"), str):
+                raise ErreurMillesime("Réglage « libelles » : chaque libellé est un texte ou un objet avec « libelle ».")
+            lib = x["libelle"].strip()
+            if not lib or "/" in lib or len(lib) > 80:
+                raise ErreurMillesime("Réglage « libelles » : libellé vide, trop long ou avec « / ».")
+            if lib in vus:
+                continue
+            vus.add(lib)
+            tnd, alb = x.get("tag_non_datee") or f"{lib}/{tag_nd}", x.get("album_non_datees") or f"Non datées {lib}"
+            if not isinstance(tnd, str) or not isinstance(alb, str):
+                raise ErreurMillesime("Réglage « libelles » : tag et album sont des textes.")
+            propres.append({"libelle": lib, "tag_non_datee": tnd.strip(), "album_non_datees": alb.strip()})
+        return propres
+    raise ErreurMillesime(f"Réglage inconnu : {cle}.")
+
+
 class Millesime:
     def __init__(self, cfg: Config, immich: Immich | None = None):
         self.cfg = cfg
@@ -201,6 +271,8 @@ class Millesime:
         self.vignettes = Cache(600)                  # 2.6.0 : grilles de « Datables par le nom »
         self.visages_immich = Cache(256)
         self.suggestions_cache = None
+        self.reveil = threading.Event()             # 2.12.0 : réveille la boucle de synchro quand l'intervalle change
+        self._reprendre_reglages()
 
     # ------------------------------------------------------------------ synchro
     def synchroniser(self, complete: bool = False) -> dict:
@@ -212,7 +284,7 @@ class Millesime:
             self.lire_chambre_noire()
             if not self.tag_prefixe:
                 raise ErreurMillesime("Libellé des numérisations inconnu : Chambre noire n'a pas encore répondu et "
-                                      "MILLESIME_TAG_PREFIXE est vide. Rien n'a été modifié.")
+                                      "le libellé n'est pas réglé (Réglages › Lecture d'Immich). Rien n'a été modifié.")
             tags = self.immich.tags()
             par_valeur = {(t.get("value") or ""): t for t in tags}
             # 2.10.0 : tous les libellés suivis (l'actuel et les anciens) sont relus.
@@ -224,7 +296,7 @@ class Millesime:
                 # Un libellé jamais trouvé (nouveau, aucun envoi encore) n'arrête rien tant qu'un autre est trouvé.
                 manquant = (perdus or suivis)[0]["tag_non_datee"]
                 origine = ("le libellé réglé dans Chambre noire (aucun envoi de non datées encore fait ?)" if self.noms_chambre_noire()
-                           else "MILLESIME_TAG_PREFIXE et MILLESIME_TAG_NON_DATEE dans la stack")
+                           else "le libellé des numérisations dans Réglages › Lecture d'Immich")
                 conseil = ("S'il a été supprimé ou renommé exprès, retire ce libellé dans Réglages › Libellés suivis."
                            if perdus else f"Vérifie {origine}.")
                 raise ErreurMillesime(f"Le tag « {manquant} » est introuvable dans Immich. {conseil} Rien n'a été modifié.")
@@ -582,6 +654,7 @@ class Millesime:
                            "ha": (self.base.lire("ha_vu") or {}).get("le"),
                            "ha_ouvert": bool(self.cfg.jeton_ha)},
                 "chambre_noire": self.etat_chambre_noire(),
+                "synchro_minutes": self.synchro_minutes,
                 "dernier_calcul": self.base.lire("dernier_calcul")}
 
     def datables(self) -> list[dict]:
@@ -697,8 +770,9 @@ class Millesime:
         s["origine"] = (s.get("source") or "tag:").split(":", 1)[0]
         s["comparaison"] = self._comparer(s)
         etats = {v["face_id"]: v["etat"] for v in s["visages"]}
-        # 2.11.0 : adresse d'Immich pour le navigateur donnée par main.py (annuaire de l'Anneau), sinon la stack
-        immich = self.cfg.immich_lien if lien_immich is None else lien_immich
+        # 2.12.0 : adresse d'Immich pour le navigateur donnée par main.py (annuaire de l'Anneau) ; vide : chemin seul,
+        # que le navigateur complète (même machine, port 2283)
+        immich = lien_immich or ""
         s["lien_immich"] = f"{immich}/photos/{asset_id}"
         # groupes sans nom présents sur la photo, avec leur nombre total de visages (pour les nommer sur place)
         s["a_nommer"] = self.base.tous(f"""
@@ -894,7 +968,7 @@ class Millesime:
                              headers={"Authorization": f"Bearer {self.cfg.jeton_chambre_noire}"})
             if r.status_code != 200:
                 raise ErreurMillesime(f"Chambre noire a répondu {r.status_code}"
-                                      + (" (adresse fermée : CHAMBRE_NOIRE_JETON_MILLESIME vide)" if r.status_code == 404 else
+                                      + (" (adresse fermée : MAISON_JETON vide chez elle)" if r.status_code == 404 else
                                          " (jeton refusé)" if r.status_code == 401 else ""))
             j = r.json()
             if not j.get("regle"):
@@ -912,22 +986,22 @@ class Millesime:
     @property
     def tag_prefixe(self) -> str:
         cn = self.noms_chambre_noire()
-        return cn["libelle"] if cn else self.cfg.tag_prefixe
+        return cn["libelle"] if cn else self.base.lire("tag_prefixe", "")
 
     @property
     def tag_non_datee_complet(self) -> str:
         cn = self.noms_chambre_noire()
-        return cn["tag_non_datee"] if cn else f"{self.cfg.tag_prefixe}/{self.cfg.tag_non_datee}"
+        return cn["tag_non_datee"] if cn else f"{self.base.lire('tag_prefixe', '')}/{self.cfg.tag_non_datee}"
 
     # ------------------------------------------------------------------ libellés suivis (2.10.0)
     def libelles(self) -> list[dict]:
-        """Libellés relus à chaque synchro : l'actuel (Chambre noire ou stack), ajouté de lui-même et mis à jour,
+        """Libellés relus à chaque synchro : l'actuel (Chambre noire ou Réglages), ajouté de lui-même et mis à jour,
         et tous les anciens, gardés jusqu'à ce qu'on les retire dans Réglages."""
         liste = self.base.lire("libelles") or []
         actuel = self.tag_prefixe
         if actuel:
             nd_tag, nd_album = self.tag_non_datee_complet, self.album_non_datees
-            origine = "chambre_noire" if self.noms_chambre_noire() else "stack"
+            origine = "chambre_noire" if self.noms_chambre_noire() else "reglages"
             l = next((x for x in liste if x["libelle"] == actuel), None)
             if not l:
                 liste.append({"libelle": actuel, "tag_non_datee": nd_tag, "album_non_datees": nd_album,
@@ -971,7 +1045,7 @@ class Millesime:
         if not l:
             raise ErreurMillesime("Libellé inconnu.")
         if l["actuel"]:
-            raise ErreurMillesime("C'est le libellé actuel : il se change dans Chambre noire (ou la stack), pas ici.")
+            raise ErreurMillesime("C'est le libellé actuel : il se change dans Chambre noire (ou Réglages › Lecture d'Immich), pas ici.")
         self.base.ecrire("libelles", [{k: v for k, v in x.items() if k != "actuel"} for x in liste if x["libelle"] != libelle])
         return self.sources()
 
@@ -980,17 +1054,96 @@ class Millesime:
         return {"relie": bool(self.cfg.jeton_chambre_noire), "noms": cn,
                 "erreur": self.base.lire("chambre_noire_erreur") if self.cfg.jeton_chambre_noire else None}
 
+    # ------------------------------------------------------------------ réglages d'usage (2.12.0)
+    # Gardés dans la table `reglages` de la base (comme les noms d'albums depuis la 2.2.0 et les libellés suivis depuis
+    # la 2.10.0). Au premier démarrage, une clé absente prend la valeur de son ancienne variable de la stack (REPRISES),
+    # une ligne au journal le dit ; la clé est alors écrite (même vide) et la variable n'est plus jamais lue.
+
+    def _reprendre_reglages(self) -> None:
+        self.repris: list[str] = []
+        for cle_, variable in REPRISES.items():
+            if self.base.valeur("SELECT 1 FROM reglages WHERE cle=?", cle_):
+                continue
+            defaut = REGLAGES_DEFAUTS[cle_]
+            brut = os.environ.get(variable, "").strip()
+            valeur, repris = defaut, False
+            if brut:
+                try:
+                    valeur = _valider_reglage(cle_, brut if not isinstance(defaut, int) else int(brut), libre=True)
+                    repris = True
+                except (ValueError, ErreurMillesime) as e:
+                    log.warning("Variable %s ignorée (%s) : valeur par défaut.", variable, e)
+            self.base.ecrire(cle_, valeur)
+            if repris:
+                self.repris.append(cle_)
+                self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
+                                   "", "reglage_repris", json.dumps({"variable": variable}),
+                                   json.dumps({"cle": cle_, "valeur": valeur}), maintenant())
+                log.info("Réglage « %s » repris de %s.", cle_, variable)
+
+    @property
+    def synchro_minutes(self) -> int:
+        return int(self.base.lire("synchro_minutes", REGLAGES_DEFAUTS["synchro_minutes"]))
+
+    def reglages(self) -> dict:
+        """Les réglages d'usage, tels que l'écran Réglages et la sauvegarde les voient (valeurs gardées ici ;
+        Chambre noire peut passer devant pour le libellé et l'album des non datées)."""
+        r = {k: self.base.lire(k, d) for k, d in REGLAGES_DEFAUTS.items() if k != "libelles"}
+        # le libellé actuel n'y est pas : il vient du réglage tag_prefixe (ou de Chambre noire) et se remet de lui-même
+        actuel = self.tag_prefixe
+        r["libelles"] = [{k: l.get(k, "") for k in CLES_LIBELLE} for l in (self.base.lire("libelles") or [])
+                         if l.get("libelle") != actuel]
+        return r
+
+    def changer_reglages(self, valeurs: dict) -> dict:
+        """Change les réglages connus (les autres clés sont refusées). Tout est vérifié avant d'écrire quoi que ce
+        soit : une valeur de mauvais type lève ErreurMillesime (400) et rien n'est changé."""
+        if not isinstance(valeurs, dict):
+            raise ErreurMillesime("Réglages attendus sous forme d'objet.")
+        inconnues = [k for k in valeurs if k not in REGLAGES_DEFAUTS]
+        if inconnues:
+            raise ErreurMillesime(f"Réglage inconnu : {', '.join(sorted(inconnues))}.")
+        propres = {k: _valider_reglage(k, v, relie=bool(self.cfg.jeton_chambre_noire), tag_nd=self.cfg.tag_non_datee)
+                   for k, v in valeurs.items()}
+        avant = self.synchro_minutes
+        for k, v in propres.items():
+            if k == "libelles":
+                self._remplacer_libelles(v)
+            else:
+                self.base.ecrire(k, v)
+        if self.synchro_minutes != avant:
+            self.reveil.set()                    # la boucle de synchro recalcule son attente sans redémarrage
+        return self.reglages()
+
+    def _remplacer_libelles(self, nouveaux: list[dict]) -> None:
+        """Remplace la liste des anciens libellés suivis ; ce qu'on sait déjà d'un libellé gardé (vu le, photos) reste.
+        L'actuel est toujours gardé (ou remis de lui-même par libelles())."""
+        anciens = {l["libelle"]: l for l in (self.base.lire("libelles") or [])}
+        actuel = self.tag_prefixe
+        liste = [anciens[actuel]] if actuel in anciens and all(n["libelle"] != actuel for n in nouveaux) else []
+        for n in nouveaux:
+            a = anciens.get(n["libelle"], {})
+            liste.append({"origine": a.get("origine", "manuel"), "ajoute_le": a.get("ajoute_le", maintenant()),
+                          "vu_le": a.get("vu_le"), "photos": a.get("photos", 0), **n})
+        self.base.ecrire("libelles", liste)
+
+    def noter_restauration(self, le: str, appliquees: list[dict]) -> None:
+        self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
+                           "", "reglages_restaures",
+                           json.dumps({d["cle"]: d["actuel"] for d in appliquees}, ensure_ascii=False),
+                           json.dumps({"le": le, "cles": [d["cle"] for d in appliquees]}, ensure_ascii=False), maintenant())
+
     # ------------------------------------------------------------------ réglages et sources (2.2.0)
     @property
     def album_non_datees(self) -> str:
         cn = self.noms_chambre_noire()
         if cn:
-            return cn["album_non_datees"]        # 2.9.0 : Chambre noire passe devant les Réglages et la stack
-        return self.base.lire("album_non_datees") or self.cfg.album_non_datees
+            return cn["album_non_datees"]        # 2.9.0 : Chambre noire passe devant les Réglages
+        return self.base.lire("album_non_datees") or ""
 
     @property
     def modele_album(self) -> str:
-        return self.base.lire("modele_album") or self.cfg.modele_album
+        return self.base.lire("modele_album") or ""
 
     def regler_albums(self, album_non_datees: str, modele_album: str) -> dict:
         album_non_datees, modele_album = (album_non_datees or "").strip(), (modele_album or "").strip()
@@ -1024,7 +1177,6 @@ class Millesime:
                           "depuis_chambre_noire": bool(self.noms_chambre_noire())},
                   "sources": liste,
                   "albums": {"non_datees": self.album_non_datees, "modele": self.modele_album,
-                             "depuis_la_stack": not self.base.lire("album_non_datees") and bool(self.cfg.album_non_datees),
                              "depuis_chambre_noire": bool(self.noms_chambre_noire())},
                   "libelles": self.libelles(),
                   "transhumance": bool(self.cfg.jeton_transhumance)}
@@ -1085,7 +1237,7 @@ class Millesime:
         if src["sorte"] != "dossier":
             raise ErreurMillesime("Seul un dossier se demande à Transhumance : un album est déjà dans Immich.")
         if not self.cfg.jeton_transhumance:
-            raise ErreurMillesime("Transhumance n'est pas réglé (MAISON_JETON ou MILLESIME_JETON_TRANSHUMANCE) : la demande n'est pas partie.")
+            raise ErreurMillesime("Transhumance n'est pas reliée (MAISON_JETON vide dans la stack) : la demande n'est pas partie.")
         try:
             r = requests.post(self.cfg.transhumance_url + "/externe/demandes", timeout=15,
                               headers={"Authorization": f"Bearer {self.cfg.jeton_transhumance}"},
@@ -1112,6 +1264,8 @@ class Millesime:
         j = self.base.un("SELECT * FROM journal WHERE id=?", journal_id)
         if not j or j["annule_le"]:
             raise ErreurMillesime("Entrée inconnue ou déjà annulée.")
+        if j["action"] in ACTIONS_REGLAGES:
+            raise ErreurMillesime("Un réglage ne s'annule pas ici : change-le dans Réglages, ou restaure une sauvegarde.")
         dernier = self.base.valeur("SELECT MAX(id) FROM journal WHERE asset_id=? AND annule_le IS NULL", j["asset_id"])
         if dernier != j["id"]:
             raise ErreurMillesime("Annule d'abord la modification la plus récente de cette photo.")
@@ -1157,7 +1311,7 @@ class Millesime:
         for g in lignes:
             g["exemples"] = self.base.tous("SELECT face_id, asset_id FROM visages WHERE person_id=? LIMIT 6",
                                            g["person_id"])
-            g["lien_immich"] = f"{self.cfg.immich_lien if lien_immich is None else lien_immich}/people/{g['person_id']}"
+            g["lien_immich"] = f"{lien_immich or ''}/people/{g['person_id']}"
         return lignes
 
     @staticmethod

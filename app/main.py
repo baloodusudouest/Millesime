@@ -5,6 +5,7 @@ import asyncio
 import logging
 import threading
 import time
+import urllib.error
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -38,7 +39,15 @@ def _boucle_synchro(stop: threading.Event):
             pass
         except Exception as e:  # noqa: BLE001
             log.warning("Synchronisation en échec : %s", e)
-        stop.wait(max(5, m().cfg.synchro_minutes) * 60)
+        # 2.12.0 : l'intervalle est un réglage (Réglages › Lecture d'Immich) ; le changer réveille l'attente,
+        # qui se recalcule depuis la dernière relecture, sans redémarrer le conteneur
+        debut = time.monotonic()
+        while not stop.is_set():
+            reste = max(5, m().synchro_minutes) * 60 - (time.monotonic() - debut)
+            if reste <= 0:
+                break
+            m().reveil.wait(reste)
+            m().reveil.clear()
 
 
 @asynccontextmanager
@@ -51,6 +60,7 @@ async def cycle(app: FastAPI):
         threading.Thread(target=_boucle_synchro, args=(stop,), daemon=True).start()
     yield
     stop.set()
+    m().reveil.set()
 
 
 app = FastAPI(title="Millésime", version=__version__, lifespan=cycle)
@@ -63,10 +73,9 @@ async def garde(request: Request, appel):
         if not jeton_valide(request.headers.get("authorization"), m().cfg.jeton_calcul):
             return JSONResponse({"detail": "Jeton de calcul manquant ou invalide."}, status_code=401)
     elif chemin == "/api/etat":
-        # 2.11.0 : carnet, avec son jeton propre (MILLESIME_JETON_CARNET) ou le jeton commun MAISON_JETON
-        acceptes = tuple(j for j in (m().cfg.jeton_carnet, *maison.jetons()) if j)
-        if not maison.jeton_valide(maison.jeton_propose(request.headers), acceptes):
-            return JSONResponse({"detail": "Jeton carnet manquant ou invalide."}, status_code=401)
+        # 2.12.0 : carnet (et toute appli maison) avec le jeton commun MAISON_JETON seul
+        if not maison.jeton_valide(maison.jeton_propose(request.headers), maison.jetons()):
+            return JSONResponse({"detail": "Jeton manquant ou invalide."}, status_code=401)
     elif chemin.startswith("/ha/"):
         # 2.8.0 : Home Assistant, avec son propre jeton ; jeton vide dans la stack = porte fermée
         if not jeton_valide(request.headers.get("authorization"), m().cfg.jeton_ha):
@@ -75,7 +84,7 @@ async def garde(request: Request, appel):
         if not ETAT["sessions"].connecte(request.cookies):
             return JSONResponse({"detail": "Connexion nécessaire."}, status_code=401)
     reponse = await appel(request)
-    if chemin.startswith(("/api/", "/ha/")) and not chemin.startswith(("/api/apercu/", "/api/visage/", "/api/vignette/")):
+    if chemin.startswith(("/api/", "/ha/", "/externe/")) and not chemin.startswith(("/api/apercu/", "/api/visage/", "/api/vignette/")):
         reponse.headers["Cache-Control"] = "no-store"
     return reponse
 
@@ -84,9 +93,9 @@ ANNUAIRE = maison.Annuaire()
 
 
 def adresse_immich(request: Request) -> str:
-    """2.11.0 : adresse d'Immich pour les liens du navigateur, lue dans l'Anneau (tuile « Immich » ; privée si la
-    page vient de Tailscale). Repli : MILLESIME_IMMICH_LIEN, puis (vide) Immich sur la même machine, port 2283."""
-    return ANNUAIRE.adresse("Immich", prive=maison.est_prive(request.headers.get("host", "")), repli=m().cfg.immich_lien)
+    """Adresse d'Immich pour les liens du navigateur, lue dans l'Anneau (tuile « Immich » ; privée si la page vient
+    de Tailscale). 2.12.0 : plus de variable de repli ; vide, le navigateur cherche Immich sur la même machine, port 2283."""
+    return ANNUAIRE.adresse("Immich", prive=maison.est_prive(request.headers.get("host", "")), repli="")
 
 
 @app.exception_handler(ErreurMillesime)
@@ -286,6 +295,85 @@ def retirer_libelle(corps: dict = Body(...)):
 @app.post("/api/reglages/albums")
 def regler_albums(corps: dict = Body(...)):
     return m().regler_albums(str(corps.get("non_datees", "")), str(corps.get("modele", "")))
+
+
+# ---- 2.12.0 : réglages d'usage, sauvegarde chez l'Anneau et restauration (contrat de sauvegarde 1)
+APPLI = "millesime"
+LIRE_SAUVEGARDE = None          # tests : faux Anneau, fonction (adresse, jeton) → réponse
+
+
+@app.get("/api/reglages")
+def lire_reglages():
+    return {"reglages": m().reglages(), "chambre_noire": bool(m().noms_chambre_noire())}
+
+
+@app.put("/api/reglages")
+def changer_reglages(corps: dict = Body(...)):
+    """Réglages internes de Millésime : permis même en lecture seule (rien n'est écrit dans Immich)."""
+    return {"reglages": m().changer_reglages(corps.get("reglages", corps)),
+            "chambre_noire": bool(m().noms_chambre_noire())}
+
+
+@app.get("/externe/sauvegarde")
+def externe_sauvegarde(request: Request):
+    """L'Anneau collecte les réglages chaque nuit (jeton commun). Jeton commun vide : porte fermée."""
+    acceptes = maison.jetons()
+    if not acceptes:
+        raise HTTPException(404, "Not Found")
+    if not maison.jeton_valide(maison.jeton_propose(request.headers), acceptes):
+        raise HTTPException(401, "Jeton manquant ou invalide.")
+    from .service import EXCLUS_SAUVEGARDE
+    return JSONResponse(maison.sauvegarde(APPLI, __version__, m().reglages(), exclus=EXCLUS_SAUVEGARDE),
+                        headers={"Cache-Control": "no-store"})
+
+
+def _chez_l_anneau(le: str = "") -> dict:
+    """Lit chez l'Anneau ; toute panne devient un message clair (404 rien à restaurer, 503 injoignable)."""
+    try:
+        r = maison.lire_sauvegarde(APPLI, le, lire=LIRE_SAUVEGARDE)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise HTTPException(404, "L'Anneau n'a aucune sauvegarde de Millésime" + (f" le {le}." if le else ".")) from e
+        raise HTTPException(503, f"L'Anneau a répondu {e.code} : réessaie plus tard.") from e
+    except Exception as e:  # noqa: BLE001 — Anneau éteint, réseau, réponse illisible
+        raise HTTPException(503, f"L'Anneau est injoignable ({e.__class__.__name__}) : réessaie plus tard.") from e
+    if not isinstance(r, dict):
+        raise HTTPException(503, "Réponse de l'Anneau illisible.")
+    return r
+
+
+def _differences(le: str) -> tuple[dict, list[dict]]:
+    from .service import EXCLUS_SAUVEGARDE
+    sauve = _chez_l_anneau(le)
+    if not isinstance(sauve.get("reglages"), dict):
+        raise HTTPException(404, f"Rien à restaurer le {le}.")
+    return sauve, maison.differences(m().reglages(), sauve["reglages"], EXCLUS_SAUVEGARDE)
+
+
+@app.get("/api/restaurer")
+def restaurer_voir(le: str = ""):
+    if not le:
+        dates = _chez_l_anneau().get("dates") or []
+        if not dates:
+            raise HTTPException(404, "L'Anneau n'a encore aucune sauvegarde de Millésime.")
+        return {"dates": dates}
+    sauve, diff = _differences(le)
+    return {"le": sauve.get("le", le), "version": sauve.get("version", ""), "differences": diff}
+
+
+@app.post("/api/restaurer")
+def restaurer(corps: dict = Body(...)):
+    """Applique les réglages d'une sauvegarde (réglages seulement, permis en lecture seule) et le note au journal."""
+    le = str(corps.get("le") or "")
+    if not le:
+        raise HTTPException(400, "Choisis la date de la sauvegarde à restaurer.")
+    _, diff = _differences(le)
+    if diff:
+        m().changer_reglages({d["cle"]: d["sauve"] for d in diff})
+        m().noter_restauration(le, diff)
+    return {"reglages": m().reglages(), "appliquees": [d["cle"] for d in diff],
+            "message": f"{len(diff)} réglage(s) restauré(s) depuis la sauvegarde du {le}." if diff
+                       else "Rien à changer : les réglages sont déjà ceux de cette sauvegarde."}
 
 
 @app.get("/api/journal")
