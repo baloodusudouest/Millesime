@@ -72,7 +72,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=app
       - name: Démarrage de l'image
         run: |
-          docker run -d --name essai -e MILLESIME_PASSWORD=x -e MILLESIME_IMMICH_CLE=x \
+          docker run -d --name essai -e MAISON_PASSWORD=essai-essai-essai -e MILLESIME_IMMICH_CLE=x \
             -e MILLESIME_IMMICH_URL=http://127.0.0.1:9 -e MILLESIME_SYNCHRO_MINUTES=60 \
             -e MILLESIME_TAG_PREFIXE=Essai -e "MILLESIME_ALBUM_NON_DATEES=Non datées essai" \
             -e "MILLESIME_MODELE_ALBUM={annee} essai" \
