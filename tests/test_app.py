@@ -1262,3 +1262,15 @@ def test_2120_restaurer(env, monkeypatch):
     anneau.sauvegardes = {}
     r = client.get("/api/restaurer")
     assert r.status_code == 404 and "aucune sauvegarde" in r.json()["detail"]
+
+
+def test_2122_age_infini_refuse(env):
+    """2.12.2 (audit du 17/11/2026) : un âge Infinity reçu du PC ne bloque plus les synchronisations."""
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    m = __import__("app.main", fromlist=["m"]).m()
+    face = m.base.un("SELECT face_id FROM visages WHERE age_visage IS NULL LIMIT 1")
+    if face:
+        m.recevoir_resultats([{"face_id": face["face_id"], "age_visage": float("inf")}])
+        assert m.base.un("SELECT age_visage, calcule_le FROM visages WHERE face_id=?", face["face_id"])["calcule_le"] == "erreur"

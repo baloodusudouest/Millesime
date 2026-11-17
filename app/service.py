@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
 import logging
 import os
 import re
@@ -571,6 +572,12 @@ class Millesime:
         n = 0
         with self.base.transaction() as cx:
             for r in resultats:
+                # 2.12.2 : un âge non fini ou hors de 0-120 (Infinity bloquait toutes les synchronisations) vaut un échec
+                for champ in ("age_visage", "age_corps"):
+                    v = r.get(champ)
+                    if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))
+                                          or not math.isfinite(v) or not 0 <= v <= 120):
+                        r = {**r, "age_visage": None} if champ == "age_visage" else {**r, "age_corps": None}
                 if r.get("age_visage") is None:
                     # échec du calcul sur ce visage : marqué pour ne pas le redemander en boucle
                     cx.execute("UPDATE visages SET calcule_le='erreur' WHERE face_id=?", (r.get("face_id"),))

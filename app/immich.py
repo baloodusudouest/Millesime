@@ -36,11 +36,14 @@ class Immich:
         for essai, attente in enumerate((*ATTENTES, None), 1):
             try:
                 r = self.s.request(methode, f"{self.url}/api{chemin}", timeout=60, **kw)
-                if r.status_code < 500 or attente is None:
+                # 2.12.2 : seules les lectures sont rejouées ; un POST rejoué pouvait créer une personne ou un album en double
+                rejouable = methode.upper() in ("GET", "PUT", "DELETE") or chemin.startswith(LECTURES_EN_POST)
+                if r.status_code < 500 or attente is None or not rejouable:
                     break
                 motif = f"HTTP {r.status_code}"
             except (requests.ConnectionError, requests.Timeout) as e:
-                if attente is None:
+                rejouable = methode.upper() in ("GET", "PUT", "DELETE") or chemin.startswith(LECTURES_EN_POST)
+                if attente is None or not rejouable:
                     raise ErreurImmich(f"Immich injoignable ({e.__class__.__name__})") from e
                 motif = e.__class__.__name__
             log.warning("Immich %s %s : %s, nouvel essai dans %s s (%s/%s)", methode, chemin, motif, attente,

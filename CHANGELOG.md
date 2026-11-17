@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 2.12.2 — 17 novembre 2026 (corrections de l'audit, suite)
+- Un âge reçu du PC de calcul qui n'est pas un nombre fini entre 0 et 120 (`Infinity`) compte comme un échec de ce visage ; avant, il bloquait toutes les synchronisations.
+- Le jeton du PC de calcul n'ouvre plus que l'aperçu des photos qui attendent un calcul (avant : n'importe quelle photo de la photothèque).
+- Les écritures vers Immich (POST) ne sont plus rejouées après un délai dépassé ou une erreur 5xx : un double pouvait apparaître (personne détachée, album).
+
 ## 2.12.1 — 17 novembre 2026 (connexion plus sûre)
 - **Connexion plus sûre** (audit du 17/11/2026, même correctif dans toutes les applis maison) :
   - un cookie portant un caractère non ASCII donnait une erreur 500 sur toute l'API ; il est maintenant simplement refusé ;

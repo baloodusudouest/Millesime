@@ -466,6 +466,9 @@ def resultats(corps: dict = Body(...)):
 
 @app.get("/api/calcul/apercu/{asset_id}")
 def apercu_calcul(asset_id: str):
+    # 2.12.2 : le jeton du PC n'ouvre que les photos qui attendent un calcul (pas toute la photothèque)
+    if not m().base.un("SELECT 1 AS x FROM visages WHERE asset_id=? AND age_visage IS NULL", asset_id):
+        raise HTTPException(404, "Pas de calcul en attente pour cette photo.")
     return Response(m().apercu(asset_id), media_type="image/jpeg")
 
 
