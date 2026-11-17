@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 2.12.1 — 17 novembre 2026 (connexion plus sûre)
+- **Connexion plus sûre** (audit du 17/11/2026, même correctif dans toutes les applis maison) :
+  - un cookie portant un caractère non ASCII donnait une erreur 500 sur toute l'API ; il est maintenant simplement refusé ;
+  - les clés qui signent les cookies (celui de l'appli et le cookie commun `maison_session` posé par l'Anneau) sont tirées du mot de passe par PBKDF2 : un cookie capté sur le réseau local ne permet plus de chercher le mot de passe à grande vitesse. **Toutes les applis doivent être à jour ensemble** ; une seule reconnexion est demandée après la mise à jour ;
+  - des essais de mot de passe lancés en parallèle ne contournent plus le délai : au-delà de 30 essais en 5 minutes, tout est refusé sans comparer.
+- Module commun `maison.py` (socle 0.7.0) : l'annuaire de l'Anneau est relu 30 s après un échec (avant : 10 min sans adresses après un redémarrage de la stack) ; un réglage `nan` ou infini est refusé ; un `reglages.json` abîmé est mis de côté (`.corrompu`) au lieu d'être écrasé.
+
 ## 2.12.0 — 16 novembre 2026
 - **Les réglages d'usage quittent la stack pour l'écran Réglages.** Nouvelle tuile **Lecture d'Immich** : le libellé des numérisations (avant `MILLESIME_TAG_PREFIXE` ; facultatif si Chambre noire est reliée) et la fréquence de relecture d'Immich (avant `MILLESIME_SYNCHRO_MINUTES`, 5 à 1440 minutes, prise en compte sans redémarrer). Les noms d'albums et les libellés suivis restent où ils étaient (Réglages, depuis la 2.2 et la 2.10).
 - **Reprise une seule fois** : au premier démarrage de la 2.12.0, chaque réglage encore absent prend la valeur de son ancienne variable de la stack (`MILLESIME_TAG_PREFIXE`, `MILLESIME_SYNCHRO_MINUTES`, `MILLESIME_ALBUM_NON_DATEES`, `MILLESIME_MODELE_ALBUM`) ; une ligne au journal le dit. Ensuite ces variables ne sont plus jamais lues. Une valeur fausse (modèle sans `{annee}`, nombre illisible) est ignorée.
