@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__, maison
 from . import estimation as est
-from .auth import COMMUN, COOKIE, DUREE, Sessions, jeton_valide
+from .auth import COMMUN, COOKIE, DUREE, Sessions, en_https, jeton_valide
 from .config import Config
 from .immich import ErreurImmich, LectureSeule
 from .service import ErreurMillesime, Millesime
@@ -137,13 +137,13 @@ def session(request: Request):
 
 
 @app.post("/api/connexion")
-async def connexion(corps: dict = Body(...)):
+async def connexion(request: Request, corps: dict = Body(...)):
     s = ETAT["sessions"]
     await asyncio.sleep(s.attente())
     if not s.verifier_mot_de_passe(str(corps.get("mot_de_passe", ""))):
         raise HTTPException(401, "Mot de passe incorrect.")
     r = JSONResponse({"ok": True})
-    r.set_cookie(COOKIE, s.creer(), max_age=DUREE, httponly=True, samesite="strict")
+    r.set_cookie(COOKIE, s.creer(), max_age=DUREE, httponly=True, samesite="strict", secure=en_https(request))
     return r
 
 

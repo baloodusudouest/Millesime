@@ -114,3 +114,14 @@ def jeton_valide(entete: str | None, attendu: str) -> bool:
     if not attendu:
         return False
     return hmac.compare_digest((entete or "").encode(), f"Bearer {attendu}".encode())
+
+
+def en_https(request) -> bool:
+    """La page est-elle servie en https ? Directement, ou derrière un relais (Tailscale Serve) qui le dit par
+    X-Forwarded-Proto, ou, à défaut, d'après l'origine que le navigateur joint à la connexion. Vrai : les cookies
+    portent « Secure » et ne partent jamais en clair. Faux (adresse locale en http) : comme avant."""
+    if request.url.scheme == "https":
+        return True
+    if request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower() == "https":
+        return True
+    return request.headers.get("origin", "").lower().startswith("https://")
