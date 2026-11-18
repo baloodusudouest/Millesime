@@ -23,7 +23,7 @@ Il ne tourne qu'une fois : si resultats/rapport.md existe, il s'arrête aussitô
 Pour le relancer : MILLESIME_TEST_FORCER=1, ou supprimer rapport.md.
 """
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 import base64
 import csv
@@ -65,6 +65,9 @@ INSIGHTFACE_URL = os.environ.get(
 MIVOLO = os.environ.get("MIVOLO", "0") == "1"
 MIVOLO_CORPS = os.environ.get("MIVOLO_CORPS", "1") == "1"
 MIVOLO_ID = os.environ.get("MIVOLO_MODELE", "iitolstykh/mivolo_v2")
+# M30 (audit du 17/11/2026) : le code Python du modèle vient de Hugging Face (trust_remote_code). MIVOLO_REVISION fige
+# la version chargée (empreinte d'un commit du dépôt du modèle) ; vide : la dernière version, avec un avertissement.
+MIVOLO_REVISION = os.environ.get("MIVOLO_REVISION", "").strip()
 
 VLM_URL = os.environ.get("VLM_URL", "").rstrip("/")
 VLM_MODELE = os.environ.get("VLM_MODELE", "qwen3-vl:8b-instruct")
@@ -267,9 +270,18 @@ class InsightFace:
         return {"insightface": float(sortie[2] * 100.0)}
 
 
+def options_mivolo() -> dict:
+    """Options de chargement de MiVOLO : version figée si MIVOLO_REVISION est posée (M30)."""
+    if MIVOLO_REVISION:
+        return {"trust_remote_code": True, "revision": MIVOLO_REVISION}
+    print("⚠️ MIVOLO_REVISION est vide : le code distant de MiVOLO est chargé dans sa dernière version, sans version "
+          "figée. Poser l'empreinte d'un commit de " + MIVOLO_ID + " pour la figer.", file=sys.stderr, flush=True)
+    return {"trust_remote_code": True}
+
+
 class MiVolo:
     """
-    MiVOLO v2 (Hugging Face iitolstykh/mivolo_v2, code chargé avec trust_remote_code).
+    MiVOLO v2 (Hugging Face iitolstykh/mivolo_v2, code chargé avec trust_remote_code, version MIVOLO_REVISION).
     Les recadrages sont des tableaux BGR (comme OpenCV). Visage seul : body_input = [None].
     Visage + corps : buste estimé à partir du visage (Immich ne détecte pas les personnes).
     """
@@ -283,10 +295,11 @@ class MiVolo:
         self.torch = torch
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if self.device == "cuda" else torch.float32
-        self.config = AutoConfig.from_pretrained(MIVOLO_ID, trust_remote_code=True)
+        options = options_mivolo()                     # M30 : version figée par MIVOLO_REVISION
+        self.config = AutoConfig.from_pretrained(MIVOLO_ID, **options)
         self.model = AutoModelForImageClassification.from_pretrained(
-            MIVOLO_ID, trust_remote_code=True, torch_dtype=dtype).to(self.device).eval()
-        self.proc = AutoImageProcessor.from_pretrained(MIVOLO_ID, trust_remote_code=True)
+            MIVOLO_ID, torch_dtype=dtype, **options).to(self.device).eval()
+        self.proc = AutoImageProcessor.from_pretrained(MIVOLO_ID, **options)
         self.dtype = dtype
 
     def _pixels(self, crops):

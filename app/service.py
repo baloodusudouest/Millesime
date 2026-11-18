@@ -1399,7 +1399,16 @@ class Millesime:
         apres = {"cible_id": cible_id, "cible_nom": cible["nom"]}
         jid = self.base.executer("INSERT INTO journal(asset_id, action, avant, apres, le) VALUES(?,?,?,?,?)",
                                  source_id, "fusionner", json.dumps(avant), json.dumps(apres), maintenant())
-        self.immich.fusionner_personnes(cible_id, [source_id])
+        try:
+            reponse = self.immich.fusionner_personnes(cible_id, [source_id])
+            # M29 : Immich répond 200 même quand il refuse ; chaque personne dit alors « success: false »
+            refus = [x for x in reponse or [] if isinstance(x, dict) and x.get("id") == source_id and not x.get("success", True)]
+            if refus:
+                raise ErreurImmich(f"fusion refusée ({refus[0].get('error') or 'sans motif'})")
+        except ErreurImmich as e:
+            apres["erreur"] = str(e)
+            self.base.executer("UPDATE journal SET apres=? WHERE id=?", json.dumps(apres), jid)
+            raise ErreurMillesime(f"Immich a refusé la fusion : {e}. Rien n'a changé dans Millésime ; voir le journal.") from e
         self.base.executer("UPDATE visages SET person_id=?, person_nom=?, naissance=? WHERE person_id=?",
                            cible_id, cible["nom"], cible.get("naissance"), source_id)
         self.base.executer("DELETE FROM frises WHERE person_id IN (?, ?)", source_id, cible_id)
@@ -1440,20 +1449,43 @@ class Millesime:
         return {"ok": True}
 
     def _annuler_fusion(self, j: dict, avant: dict, apres: dict) -> dict:
-        """Recrée une personne et lui rend les visages notés avant la fusion."""
-        nouvelle = self.immich.creer_personne(avant.get("nom") or "")
+        """Recrée une personne et lui rend les visages notés avant la fusion. M29 : une fusion en échec dont la
+        personne d'origine existe encore n'a rien à défaire ; un visage qu'Immich refuse de rendre est dit."""
+        if apres.get("erreur"):
+            try:
+                self.immich.personne(avant["source_id"])
+                existe = True
+            except ErreurImmich:                     # disparue : la fusion a peut-être eu lieu malgré l'erreur
+                existe = False
+            if existe:
+                self.base.executer("UPDATE journal SET annule_le=? WHERE id=?", maintenant(), j["id"])
+                return {"ok": True, "visages": 0, "non_defaits": [], "message": "La fusion n'avait pas eu lieu : rien à défaire."}
+        try:
+            nouvelle = self.immich.creer_personne(avant.get("nom") or "")
+        except ErreurImmich as e:
+            raise ErreurMillesime(f"Immich a refusé de recréer la personne : {e}. Rien n'a été défait.") from e
+        rendus, non_defaits = [], []
         for fid in avant.get("faces", []):
-            self.immich.reassigner_visage(fid, nouvelle["id"])
-        faces = avant.get("faces", [])
-        if faces:
-            marque = ",".join("?" * len(faces))
+            try:
+                self.immich.reassigner_visage(fid, nouvelle["id"])
+                rendus.append(fid)
+            except ErreurImmich as e:
+                log.warning("Annulation de fusion : visage %s non rendu (%s)", fid, e)
+                non_defaits.append(fid)
+        if rendus:
+            marque = ",".join("?" * len(rendus))
             self.base.executer(f"UPDATE visages SET person_id=?, person_nom=?, naissance=NULL WHERE face_id IN ({marque})",
-                               nouvelle["id"], avant.get("nom") or None, *faces)
+                               nouvelle["id"], avant.get("nom") or None, *rendus)
+        if non_defaits:
+            self.base.executer("UPDATE journal SET apres=? WHERE id=?", json.dumps({**apres, "non_defaits": non_defaits}), j["id"])
         self.base.executer("DELETE FROM frises WHERE person_id=?", apres.get("cible_id"))
         self.base.executer("UPDATE journal SET annule_le=? WHERE id=?", maintenant(), j["id"])
         self.suggestions_cache = None
         est.recalculer_propositions(self.base, self.cfg.seuil_doute)
-        return {"ok": True, "person_id": nouvelle["id"], "visages": len(faces)}
+        message = (f"Annulée en partie : {len(non_defaits)} visage{'s' if len(non_defaits) > 1 else ''} refusé"
+                   f"{'s' if len(non_defaits) > 1 else ''} par Immich reste{'nt' if len(non_defaits) > 1 else ''} chez "
+                   f"{apres.get('cible_nom') or 'la personne cible'} : à défaire dans Immich." if non_defaits else "")
+        return {"ok": True, "person_id": nouvelle["id"], "visages": len(rendus), "non_defaits": non_defaits, "message": message}
 
     def ignorer_groupe(self, person_id: str) -> dict:
         self.base.executer("INSERT OR IGNORE INTO groupes_ignores(person_id) VALUES(?)", person_id)

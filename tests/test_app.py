@@ -1274,3 +1274,32 @@ def test_2122_age_infini_refuse(env):
     if face:
         m.recevoir_resultats([{"face_id": face["face_id"], "age_visage": float("inf")}])
         assert m.base.un("SELECT age_visage, calcule_le FROM visages WHERE face_id=?", face["face_id"])["calcule_le"] == "erreur"
+
+
+def test_m29_fusion_refusee_notee_en_echec_et_annulation_incomplete_dite(env):
+    """M29 (audit du 17/11/2026) : une fusion refusée par Immich n'est pas notée réussie ; une annulation qui ne
+    rend pas tous les visages dit lesquels restent."""
+    client, E = env
+    connecter(client)
+    client.post("/api/synchroniser")
+    faces = sorted(f["id"] for x in E["assets"].values() for f in x["faces"] if (f["person"] or {}).get("id") == "inconnu1")
+    assert len(faces) >= 2
+    # Immich répond 200 mais refuse la fusion : erreur, rien n'a changé dans Millésime, le journal le dit
+    E["fusion_refusee"] = True
+    r = client.post("/api/nommer/inconnu1/fusionner", json={"cible": "mamie"})
+    assert r.status_code == 400 and "refusé" in r.json()["detail"]
+    assert "inconnu1" in [g["person_id"] for g in client.get("/api/nommer").json()["groupes"]]
+    j = next(x for x in client.get("/api/journal").json() if x["action"] == "fusionner")
+    assert j["apres"].get("erreur") and not j["annule_le"]
+    assert client.post(f"/api/journal/{j['id']}/annuler").json()["ok"]        # rien à défaire : seulement noté
+    assert all((f["person"] or {}).get("id") == "inconnu1" for x in E["assets"].values() for f in x["faces"] if f["id"] in faces)
+    # Fusion réussie, puis annulation où Immich refuse un visage : l'annulation le dit
+    E["fusion_refusee"] = False
+    assert client.post("/api/nommer/inconnu1/fusionner", json={"cible": "mamie"}).json()["visages"] == len(faces)
+    E["visages_refuses"] = {faces[0]}
+    j = next(x for x in client.get("/api/journal").json() if x["action"] == "fusionner" and not x["annule_le"])
+    r = client.post(f"/api/journal/{j['id']}/annuler").json()
+    assert r["non_defaits"] == [faces[0]] and r["visages"] == len(faces) - 1 and "1 visage" in r["message"]
+    assert next(f for x in E["assets"].values() for f in x["faces"] if f["id"] == faces[0])["person"]["id"] == "mamie"
+    j = next(x for x in client.get("/api/journal").json() if x["id"] == j["id"])
+    assert j["annule_le"] and j["apres"]["non_defaits"] == [faces[0]]

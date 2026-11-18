@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 2.12.6 — 18 novembre 2026 (constats moyens de l'audit)
+- **M29** : une fusion de personnes refusée par Immich (erreur, ou réponse « success: false ») est notée en échec au journal (« écriture interrompue ») et rien ne change dans Millésime ; son annulation ne défait rien si la personne d'origine existe encore. Une annulation de fusion dont Immich refuse certains visages le dit (« annulée en partie », visages restés chez la personne cible, à défaire dans Immich) au lieu de s'arrêter en route. Le rejeu des seules lectures (pas des POST) était déjà fait en 2.12.2.
+- **M30** : le calculateur du PC charge le code de MiVOLO à la version donnée par la nouvelle variable `MIVOLO_REVISION` (empreinte d'un commit du modèle sur Hugging Face) ; vide, il garde la dernière version et l'écrit en avertissement. L'empreinte n'est pas encore choisie. Test de mesure 0.2.3.
+- `maison.py` du socle 0.8.2 (audit M3) : réglages secrets reconnus par mots, adresse avec identifiant écartée, champ `ecartes` dans la sauvegarde (noms seulement).
+
 ## 2.12.5 — 18 novembre 2026 (plus en root)
 - **L'appli ne tourne plus en root** (audit du 17/11/2026) : `entrypoint.sh` adopte le propriétaire du dossier `/state` (le compte du NAS), lui rend les fichiers créés par les versions précédentes (trois fichiers à root sur le NAS, vérifié le 18/11), puis lance l'appli avec `gosu`. `/state` à root (dossier créé par Docker) : refus avec le remède ; dépannage : `MAISON_ROOT_ACCEPTE=oui`.
 - Essai de démarrage du CI avec un dossier à un compte ordinaire.

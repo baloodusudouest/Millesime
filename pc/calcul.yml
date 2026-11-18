@@ -25,6 +25,7 @@ services:
       - VEILLE=1                              # reste allumé et redemande du travail
       - VEILLE_MINUTES=${VEILLE_MINUTES:-5}
       - MIVOLO_CORPS=1
+      - MIVOLO_REVISION=${MIVOLO_REVISION:-}  # empreinte du commit du modèle (vide : dernière version, avertissement)
       - THREADS=${THREADS:-auto}
     volumes:
       - ./data:/data                          # cache du modèle MiVOLO (téléchargé une fois)

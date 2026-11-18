@@ -193,3 +193,16 @@ def test_mivolo(tmp_path, modele):
     assert "MiVOLO v2, visage seul — scans" in rapport
     assert "MiVOLO v2, visage + buste estimé — scans" in rapport
     assert "erreur(s)" not in rapport.split("## 4.")[0], rapport
+
+
+def test_m30_mivolo_charge_a_une_version_figee_si_elle_est_donnee(monkeypatch, capsys):
+    """M30 (audit du 17/11/2026) : le code distant de MiVOLO est chargé à la version MIVOLO_REVISION si elle est posée ;
+    vide, rien ne change mais un avertissement le dit."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mesure"))
+    import mesure
+    monkeypatch.setattr(mesure, "MIVOLO_REVISION", "empreinte-inventee")
+    assert mesure.options_mivolo() == {"trust_remote_code": True, "revision": "empreinte-inventee"}
+    assert "MIVOLO_REVISION" not in capsys.readouterr().err
+    monkeypatch.setattr(mesure, "MIVOLO_REVISION", "")
+    assert mesure.options_mivolo() == {"trust_remote_code": True}
+    assert "MIVOLO_REVISION" in capsys.readouterr().err

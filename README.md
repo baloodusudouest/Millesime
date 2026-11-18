@@ -118,6 +118,7 @@ Le calculateur tourne ensuite en **veille** tant que Docker Desktop est ouvert, 
 - Quand la file est vide, Millésime en profite pour relire Immich, au plus toutes les 15 minutes : un visage nommé ou ajouté dans Immich est analysé en moins de 20 minutes environ.
 - Les aperçus passent par Millésime : la clé Immich reste sur le NAS.
 - Arrêter la veille : `docker compose -f calcul.yml down`.
+- Version du modèle : `MIVOLO_REVISION` (dans `.env`) fige le code de MiVOLO chargé depuis Hugging Face à l'empreinte d'un commit du dépôt `iitolstykh/mivolo_v2`. Vide (par défaut) : la dernière version est chargée et le journal du calculateur l'écrit en avertissement. L'empreinte à poser n'est pas encore choisie.
 - Faire une seule passe sans veille : `docker compose -f calcul.yml run --rm -e VEILLE=0 millesime-calcul`.
 
 L'Accueil et l'écran « Calcul sur le PC » montrent en direct l’état du PC (non disponible, disponible, calcul en cours avec barre d’avancement et temps restant). `/api/etat` renvoie `pc_connecte`, et carnet ne demande d'allumer le PC que s'il ne s'est pas manifesté depuis 12 minutes.
@@ -220,6 +221,7 @@ Le test ne se relance pas tout seul. Si `resultats/rapport.md` existe, le conten
 | `MIVOLO` | `0` (`1` dans `mesure-pc`) | Méthode MiVOLO v2 |
 | `MIVOLO_CORPS` | `1` | Ajoute la variante visage + buste estimé |
 | `MIVOLO_MODELE` | `iitolstykh/mivolo_v2` | Modèle MiVOLO sur Hugging Face |
+| `MIVOLO_REVISION` | — | Empreinte du commit du modèle à charger (fige le code distant chargé avec `trust_remote_code`) ; vide : dernière version, avec un avertissement au journal |
 | `VLM_URL` | — | Adresse d'Ollama (vision locale désactivée si vide) |
 | `VLM_MODELE` | `qwen3-vl:8b-instruct` | Modèle de vision d'Ollama |
 | `MAX_PHOTOS_VLM` | `150` | Nombre de photos datées par la vision locale |

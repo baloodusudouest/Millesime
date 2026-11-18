@@ -25,6 +25,7 @@ services:
       - INSIGHTFACE=1                         # référence du 1er test
       - MIVOLO=1                              # MiVOLO v2, visage seul
       - MIVOLO_CORPS=1                        # MiVOLO v2, visage + buste estimé
+      - MIVOLO_REVISION=${MIVOLO_REVISION:-}  # empreinte du commit du modèle (vide : dernière version, avertissement)
       - VLM_URL=http://host.docker.internal:11434   # Ollama du PC
       - VLM_MODELE=${VLM_MODELE:-qwen3-vl:8b-instruct}
       - MAX_PHOTOS_VLM=${MAX_PHOTOS_VLM:-150}

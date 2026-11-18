@@ -189,6 +189,8 @@ def demarrer():
                                               "nextPage": suivante}})
             m = re.fullmatch(r"/api/people/([^/]+)/merge", self.path)
             if m:
+                if E.get("fusion_refusee"):              # M29 : comme Immich, 200 mais chaque id en échec
+                    return self._json([{"id": i, "success": False, "error": "no_permission"} for i in c["ids"]])
                 cible = E["personnes"][m.group(1)]
                 for sid in c["ids"]:
                     for x in E["assets"].values():
@@ -242,7 +244,7 @@ def demarrer():
             m = re.fullmatch(r"/api/faces/([^/]+)", self.path)
             if m:
                 # comme le vrai Immich : l'adresse porte la personne, le corps porte le visage
-                if m.group(1) not in E["personnes"]:
+                if m.group(1) not in E["personnes"] or c["id"] in E.get("visages_refuses", ()):   # M29
                     return self._json({"message": "Bad Request"}, 400)
                 for x in E["assets"].values():
                     for f in x["faces"]:

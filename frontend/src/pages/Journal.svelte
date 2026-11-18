@@ -9,7 +9,8 @@
   charger()
   async function annuler(j) {
     erreur = ''
-    try { await api.post(`/api/journal/${j.id}/annuler`); await charger() } catch (e) { erreur = e.message }
+    // M29 : une annulation incomplète le dit (visages qu'Immich a refusé de rendre)
+    try { const r = await api.post(`/api/journal/${j.id}/annuler`); if (r?.message) erreur = r.message; await charger() } catch (e) { erreur = e.message }
   }
   const NOMS = { tag_prefixe: 'libellé des numérisations', synchro_minutes: 'relecture d\'Immich',
                  album_non_datees: 'album des non datés', modele_album: 'album par année', libelles: 'libellés suivis' }
@@ -42,7 +43,7 @@
         {/if}
         <div class="min-w-0 flex-1">
           <p class="truncate">{libelle(j)}</p>
-          <p class="secondaire text-sm">{dateCourte(j.le)}{j.annule_le ? ` · annulée le ${dateCourte(j.annule_le)}` : ''}{j.apres.erreur ? ' · écriture interrompue' : ''}</p>
+          <p class="secondaire text-sm">{dateCourte(j.le)}{j.annule_le ? ` · annulée le ${dateCourte(j.annule_le)}` : ''}{j.apres.erreur ? ' · écriture interrompue' : ''}{j.apres.non_defaits?.length ? ' · annulée en partie' : ''}</p>
         </div>
         {#if !j.annule_le && !REGLAGE.includes(j.action)}
           <button class="bouton" onclick={() => annuler(j)}>Annuler</button>
