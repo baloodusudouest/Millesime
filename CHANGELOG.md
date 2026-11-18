@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 2.14.0 — 18 novembre 2026 (santé des tâches de fond)
+- **Tâches suivies dans `/health`** (champ `taches`, socle 0.9.1) : `synchro-immich` (régulière, période = intervalle de Réglages › Lecture d'Immich, 5 min au moins ; redéclarée à chaque tour si l'intervalle change), `lecture-sillage` (régulière, 900 s : la lecture des dates signalées par les invités chez Sillage, toutes les 15 min), `synchro-complete` (à la demande : bouton « Synchroniser »), `copie-des-bases` (régulière, 86 400 s).
+- La lecture chez Sillage garde toujours l'erreur pour elle (notée en base, montrée dans « Reçues des invités ») ; le tour est maintenant compté comme raté quand Sillage n'a pas répondu, pour que `/health` le dise (« en retard » au bout de 40 min sans réussite). Rien d'autre ne change, pas de ligne en plus au journal.
+- **Copie de la base** chaque nuit à **01:40, heure de Paris** : `millesime.db` copiée de façon cohérente (API de sauvegarde de SQLite, vérifiée) vers `<MILLESIME_ETAT>/copies/millesime-derniere.db`, écrasée chaque nuit (Hyper Backup tient l'historique) ; état dans `/health` (`copie_base`).
+- `/health` : champs ajoutés `version_socle`, `taches`, `copie_base` ; rien d'existant ne change. Les messages d'erreur des tâches n'y sont qu'avec le jeton commun (`Authorization: Bearer MAISON_JETON`) ou une session valide.
+- `maison.py` du socle 0.9.0. Un seul worker uvicorn (registre en mémoire).
+- Jamais essayé sur la vraie installation (ni la copie de nuit, ni sa remise en place).
+- Tests : 69 réussis et 1 sauté sans MiVOLO (2 nouveaux, `tests/test_sante.py`).
+
 ## 2.13.0 — 18 novembre 2026 (reçues des invités)
 - **Nouvelle tuile « Reçues des invités »** dans À traiter, avec son compteur (une photo par ligne), et sa page (`#recues`) : les années que les invités proposent sous leurs photos dans Sillage 0.17 (« Pas la bonne année ? »). Pour chaque photo : tous les avis (année, « environ », souvenir de l'invité affiché comme du texte, prénoms, date d'envoi), la date actuelle dans Immich, l'estimation de Millésime s'il y en a une, et « date déjà changée depuis l'avis » quand la date d'Immich n'est plus celle que l'invité voyait.
 - **Gestes** : « Accepter <année> » (un bouton par année proposée), « Corriger » (Julien tape l'année), « Écarter ». Accepter et corriger passent par la même écriture qu'« À dater » (1er juillet à midi, tag `Date estimée/AAAA ±1`, ±3 si tous les avis de cette année disent « environ »), le même journal (source « avis d'invité ») et le même Annuler ; une photo d'appareil, qui n'est pas un scan, reçoit la date et le tag. Écarter n'écrit rien dans Immich. « Tout accepter » ne prend que les photos à un seul avis, à deux ans près de l'estimation de Millésime. Refusés en lecture seule.

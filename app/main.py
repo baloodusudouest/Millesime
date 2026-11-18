@@ -31,10 +31,24 @@ def m() -> Millesime:
     return ETAT["m"]
 
 
+# 2.14.0 : noms des tâches suivies dans /health (taches, socle 0.9.0)
+TACHE_SYNCHRO = "synchro-immich"            # relecture régulière d'Immich (intervalle : Réglages › Lecture d'Immich)
+TACHE_SILLAGE = "lecture-sillage"           # lecture des dates signalées par les invités chez Sillage
+TACHE_SYNCHRO_COMPLETE = "synchro-complete"  # bouton « Synchroniser » (à la demande)
+
+
+def _periode_synchro() -> int:
+    """Période réelle de la boucle de synchro, en secondes (le réglage, 5 min au moins)."""
+    return max(5, m().synchro_minutes) * 60
+
+
 def _boucle_synchro(stop: threading.Event):
     while not stop.is_set():
+        # 2.14.0 : redéclarée à chaque tour : l'intervalle peut avoir changé dans Réglages
+        maison.TACHES.declarer(TACHE_SYNCHRO, periode_s=_periode_synchro(), type="reguliere")
         try:
-            m().synchroniser()
+            with maison.TACHES.tour(TACHE_SYNCHRO):
+                m().synchroniser()
         except ErreurMillesime:
             pass
         except Exception as e:  # noqa: BLE001
@@ -53,10 +67,25 @@ def _boucle_synchro(stop: threading.Event):
 SILLAGE_MINUTES = 15             # 2.13.0 : lecture des dates signalées par les invités chez Sillage
 
 
+class _SillageMuet(Exception):
+    """2.14.0 : Sillage n'a pas répondu à la lecture (déjà noté par lire_sillage dans « sillage_erreur »)."""
+
+
+def _lire_sillage_suivi() -> None:
+    """Un tour de la lecture chez Sillage, suivi dans /health. lire_sillage garde pour lui l'erreur de Sillage
+    (notée dans la base, montrée dans « Reçues des invités ») : elle est relancée ici pour que le tour compte comme raté."""
+    with maison.TACHES.tour(TACHE_SILLAGE):
+        etat = m().lire_sillage()
+        if etat and etat.get("erreur"):
+            raise _SillageMuet((etat["erreur"] or {}).get("detail") or "Sillage ne répond pas")
+
+
 def _boucle_sillage(stop: threading.Event):
     while not stop.is_set():
         try:
-            m().lire_sillage()
+            _lire_sillage_suivi()
+        except _SillageMuet:
+            pass                 # comme avant : l'erreur est déjà notée par lire_sillage, pas de ligne en plus au journal
         except Exception as e:  # noqa: BLE001
             log.warning("Lecture de Sillage en échec : %s", e)
         stop.wait(SILLAGE_MINUTES * 60)
@@ -67,13 +96,21 @@ async def cycle(app: FastAPI):
     if "m" not in ETAT:
         ETAT["m"] = Millesime(Config.depuis_env())
     ETAT["sessions"] = Sessions(m().cfg.mot_de_passe, m().base.lire("session_generation", 0))
+    # 2.14.0 : santé des tâches de fond (socle 0.9.0) — chaque boucle se déclare, chaque tour est suivi dans /health
+    maison.TACHES.declarer(TACHE_SYNCHRO, periode_s=_periode_synchro(), type="reguliere")
+    maison.TACHES.declarer(TACHE_SILLAGE, periode_s=SILLAGE_MINUTES * 60, type="reguliere")
+    maison.TACHES.declarer(TACHE_SYNCHRO_COMPLETE, type="demande")
     stop = threading.Event()
     if ETAT.get("synchro_auto", True):
         threading.Thread(target=_boucle_synchro, args=(stop,), daemon=True).start()
         threading.Thread(target=_boucle_sillage, args=(stop,), daemon=True).start()
+    # 2.14.0 : copie cohérente de la base chaque nuit (heure de Paris), dans <état>/copies
+    copie = asyncio.create_task(maison.planifier_copie("millesime", [m().cfg.etat_dir / "millesime.db"],
+                                                       m().cfg.etat_dir / "copies", maison.HEURES_COPIE["millesime"]))
     yield
     stop.set()
     m().reveil.set()
+    copie.cancel()
 
 
 app = FastAPI(title="Millésime", version=__version__, lifespan=cycle)
@@ -148,13 +185,16 @@ def _a_traiter() -> dict:
 
 
 @app.get("/health")
-def sante():
+def sante(request: Request):
     try:
         nombres = _a_traiter()
     except Exception as e:  # noqa: BLE001 — la sonde répond toujours
         log.warning("Nombre à traiter illisible : %s", e)
         nombres = {}
-    return {"ok": True, "version": __version__, **nombres}
+    # 2.14.0 : + version_socle, taches, copie_base (socle 0.9.0) ; messages d'erreur seulement avec le jeton commun
+    # ou une session valide
+    return {"ok": True, "version": __version__, **nombres,
+            **maison.sante(request, jeton_commun=maison.jetons(), session_ok=ETAT["sessions"].connecte(request.cookies))}
 
 
 # -- connexion -------------------------------------------------------------------
@@ -203,7 +243,8 @@ def etat_pc():
 @app.post("/api/synchroniser")
 def synchroniser():
     """Le bouton « Synchroniser » relit tout (2.4.0) ; la synchro de chaque heure est légère."""
-    return m().synchroniser(complete=True)
+    with maison.TACHES.tour(TACHE_SYNCHRO_COMPLETE):     # 2.14.0 : suivi dans /health (tâche à la demande)
+        return m().synchroniser(complete=True)
 
 
 @app.post("/api/datables/dater")
