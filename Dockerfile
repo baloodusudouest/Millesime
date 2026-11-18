@@ -25,11 +25,12 @@ LABEL org.opencontainers.image.title="millesime" \
       org.opencontainers.image.description="Dater les scans de photos papier dans Immich (écran de comparaison + indice MiVOLO calculé sur le PC)" \
       org.opencontainers.image.source="https://github.com/baloodusudouest/Millesime" \
       org.opencontainers.image.version="${VERSION}"
-RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata gosu && rm -rf /var/lib/apt/lists/*
 COPY --from=roues /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 WORKDIR /srv
 COPY app ./app
+COPY entrypoint.sh /entrypoint.sh
 COPY --from=interface /app/static ./app/static
 ENV TZ=Europe/Paris \
     MILLESIME_ETAT=/state \
@@ -39,4 +40,5 @@ VOLUME ["/state"]
 EXPOSE 8098
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
   CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8098/health')" || exit 1
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8098", "--no-access-log"]
+# 2.12.5 : plus en root (audit du 17/11/2026) ; entrypoint.sh adopte le propriétaire de /state
+ENTRYPOINT ["/entrypoint.sh"]

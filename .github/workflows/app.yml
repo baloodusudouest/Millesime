@@ -72,7 +72,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=app
       - name: Démarrage de l'image
         run: |
-          docker run -d --name essai -e MAISON_PASSWORD=essai-essai-essai -e MILLESIME_IMMICH_CLE=x \
+          mkdir -p "$RUNNER_TEMP/etat"   # dossier à un compte ordinaire, comme sur le NAS (root est refusé depuis 2.12.5)
+          docker run -d --name essai -v "$RUNNER_TEMP/etat:/state" -e MAISON_PASSWORD=essai-essai-essai -e MILLESIME_IMMICH_CLE=x \
             -e MILLESIME_IMMICH_URL=http://127.0.0.1:9 -e MILLESIME_SYNCHRO_MINUTES=60 \
             -e MILLESIME_TAG_PREFIXE=Essai -e "MILLESIME_ALBUM_NON_DATEES=Non datées essai" \
             -e "MILLESIME_MODELE_ALBUM={annee} essai" \

@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.12.5 — 18 novembre 2026 (plus en root)
+- **L'appli ne tourne plus en root** (audit du 17/11/2026) : `entrypoint.sh` adopte le propriétaire du dossier `/state` (le compte du NAS), lui rend les fichiers créés par les versions précédentes (trois fichiers à root sur le NAS, vérifié le 18/11), puis lance l'appli avec `gosu`. `/state` à root (dossier créé par Docker) : refus avec le remède ; dépannage : `MAISON_ROOT_ACCEPTE=oui`.
+- Essai de démarrage du CI avec un dossier à un compte ordinaire.
+
 ## 2.12.4 — 18 novembre 2026 (cookies Secure)
 - **Cookies `Secure` en https** (audit du 17/11/2026, même correctif dans toutes les applis maison) : ouverte en https (directement, derrière Tailscale Serve qui le dit par `X-Forwarded-Proto`, ou d'après l'origine de la page), l'appli pose ses cookies de session avec l'attribut `Secure` : ils ne partent jamais en clair. En http (adresse locale), rien ne change.
 
