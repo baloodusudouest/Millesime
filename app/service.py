@@ -175,6 +175,13 @@ class ErreurMillesime(Exception):
     pass
 
 
+# 2.13.0 : dates signalées par les invités de Sillage (contrat 1 entre les deux applis)
+SOURCE_AVIS = "avis d'invité"
+CONTRAT_SILLAGE = 1
+ISSUES_AVIS = ("acceptee", "corrigee", "ecartee")
+ACCORD_TOUT_ACCEPTER = 2          # « Tout accepter » : avis à ±2 ans de l'estimation de Millésime
+
+
 class Cache(OrderedDict):
     def __init__(self, taille: int):
         super().__init__()
@@ -653,7 +660,8 @@ class Millesime:
                               "a_nommer": len(self.groupes_a_nommer()),
                               "sans_naissance": len(self.sans_naissance()),
                               "suspects": len(est.suspects(self.base, self.cfg.seuil_suspect)),
-                              "datables": len(self.datables())},
+                              "datables": len(self.datables()),
+                              "recues_invites": self.compter_recues()},
                 "taches": self.compter_taches(), "calibrage": cal,
                 "derniere_synchro": self.base.lire("derniere_synchro"),
                 "pc": self.etat_pc(),
@@ -661,6 +669,7 @@ class Millesime:
                            "ha": (self.base.lire("ha_vu") or {}).get("le"),
                            "ha_ouvert": bool(self.cfg.jeton_ha)},
                 "chambre_noire": self.etat_chambre_noire(),
+                "sillage": self.etat_sillage(),
                 "synchro_minutes": self.synchro_minutes,
                 "dernier_calcul": self.base.lire("dernier_calcul")}
 
@@ -894,8 +903,14 @@ class Millesime:
     def _album_par_nom(self, nom: str) -> dict | None:
         return next((a for a in self.immich.albums() if a.get("albumName") == nom), None)
 
-    def valider(self, asset_id: str, annee: int, marge: int) -> dict:
+    def valider(self, asset_id: str, annee: int, marge: int, source: str | None = None) -> dict:
+        """Écrit l'année dans Immich (date au 1er juillet, tag « Date estimée/AAAA ±marge », albums des scans tagués),
+        note tout au journal (Annuler). 2.13.0 : `source` (« avis d'invité ») est noté au journal ; avec lui, une photo
+        que Millésime ne date pas (photo d'appareil, scan daté par tampon) est acceptée : date et tag seulement."""
         s = self.base.un("SELECT * FROM scans WHERE asset_id=? AND type='non_datee'", asset_id)
+        hors_scans = not s and source == SOURCE_AVIS
+        if hors_scans:
+            s = {"statut": None, "source": None, "annee_envoi": None}
         if not s:
             raise ErreurMillesime("Scan inconnu.")
         annee, marge = int(annee), max(0, int(marge))
@@ -911,7 +926,11 @@ class Millesime:
                  "tags_estimes": [{"id": t["id"], "valeur": t.get("value")} for t in tags_estimes],
                  "albums": albums_avant, "statut": s["statut"]}
         apres = {"date": f"{annee}-07-01T12:00:00.000Z", "tag": f"{self.cfg.tag_estimee}/{annee} ±{marge}"}
-        if not s.get("source"):
+        if source:
+            apres["source"] = source
+        # un scan tagué change d'album ; une photo d'un album ou d'un dossier choisi, ou hors scans (2.13.0), reste où elle est
+        ranger = not s.get("source") and not hors_scans
+        if ranger:
             if not self.modele_album or not self.album_non_datees:
                 raise ErreurMillesime("Les deux noms d'albums des scans ne sont pas réglés : renseigne-les dans Réglages. Rien n'a été modifié.")
             apres["album"] = self.modele_album.format(annee=annee)
@@ -924,7 +943,7 @@ class Millesime:
             tag = self.immich.tag_existant_ou_cree(apres["tag"])
             self.immich.taguer(tag["id"], [asset_id])
             apres["tag_id"] = tag["id"]
-            if not s.get("source"):
+            if ranger:
                 # Un scan tagué quitte l'album des non datées pour celui de son année.
                 # Une photo d'un album ou d'un dossier choisi reste où elle est (2.2.0) : date et tag seulement.
                 nd = next((al for al in albums_avant if al["nom"] in self.albums_non_datees()), None)
@@ -999,6 +1018,193 @@ class Millesime:
     def tag_non_datee_complet(self) -> str:
         cn = self.noms_chambre_noire()
         return cn["tag_non_datee"] if cn else f"{self.base.lire('tag_prefixe', '')}/{self.cfg.tag_non_datee}"
+
+    # ------------------------------------------------------------------ reçues des invités (2.13.0)
+    # Sillage garde les dates que les invités signalent (« Pas la bonne année ? ») ; Millésime vient les lire
+    # (GET /externe/signalements, jeton commun), les montre une ligne par photo, et c'est Julien qui accepte, corrige
+    # ou écarte. Accepter et corriger passent par valider() (même écriture, même journal, même Annuler), puis Millésime
+    # dit à Sillage que la photo est traitée (POST /externe/signalements/traite, qui ferme tous ses avis).
+    # Si ce POST échoue, la ligne reste « à confirmer chez Sillage » et il est refait à la lecture suivante,
+    # sans rien réécrire dans Immich.
+
+    def _sillage(self, methode: str, chemin: str, corps: dict | None = None):
+        import requests
+        try:
+            r = requests.request(methode, self.cfg.sillage_url + chemin, json=corps, timeout=15,
+                                 headers={"Authorization": f"Bearer {self.cfg.jeton_sillage}"})
+        except requests.RequestException as e:
+            raise ErreurMillesime(f"Sillage ne répond pas ({e.__class__.__name__})") from e
+        if r.status_code != 200:
+            raise ErreurMillesime(f"Sillage a répondu {r.status_code}"
+                                  + (" (adresse fermée : MAISON_JETON vide chez lui)" if r.status_code == 404 else
+                                     " (jeton refusé)" if r.status_code == 401 else ""))
+        try:
+            return r.json()
+        except ValueError as e:
+            raise ErreurMillesime("réponse de Sillage illisible") from e
+
+    def _confirmer_chez_sillage(self, asset_id: str, issue: str) -> bool:
+        """POST traite chez Sillage ; vrai si Sillage a répondu (les avis de la photo sont alors oubliés ici)."""
+        try:
+            r = self._sillage("POST", "/externe/signalements/traite", {"asset": asset_id, "issue": issue})
+            if not isinstance(r, dict) or not isinstance(r.get("fermes"), int):
+                raise ErreurMillesime("réponse de Sillage illisible")
+        except ErreurMillesime as e:
+            self.base.ecrire("sillage_erreur", {"le": maintenant(), "detail": str(e)})
+            log.warning("Sillage : photo traitée non confirmée (%s), nouvel essai à la prochaine lecture.", e)
+            return False
+        self.base.executer("DELETE FROM avis_invite WHERE asset=? AND traite IS NOT NULL", asset_id)
+        return True
+
+    def lire_sillage(self) -> dict | None:
+        """Relit chez Sillage les avis non traités (toutes les 15 min et sur « Relire »). Refait d'abord les
+        confirmations restées en route. Sillage injoignable : rien n'est perdu, la dernière lecture reste."""
+        if not self.cfg.jeton_sillage:
+            return None
+        if not self.cfg.lecture_seule:            # confirmer chez Sillage est une écriture : pas en lecture seule
+            for r in self.base.tous("SELECT asset, MIN(traite) AS issue FROM avis_invite WHERE traite IS NOT NULL GROUP BY asset"):
+                self._confirmer_chez_sillage(r["asset"], r["issue"])
+        try:
+            j = self._sillage("GET", "/externe/signalements")
+            if not isinstance(j, dict) or j.get("contrat") != CONTRAT_SILLAGE or not isinstance(j.get("signalements"), list):
+                raise ErreurMillesime(f"contrat inconnu ({j.get('contrat') if isinstance(j, dict) else '?'}) : "
+                                      f"Millésime attend le contrat {CONTRAT_SILLAGE}")
+        except ErreurMillesime as e:
+            self.base.ecrire("sillage_erreur", {"le": maintenant(), "detail": str(e)})
+            return self.etat_sillage()
+        lu, vus = maintenant(), set()
+        for x in j["signalements"]:
+            if not isinstance(x, dict):
+                continue
+            ident, asset, annee = x.get("id"), x.get("asset"), x.get("annee")
+            if (not isinstance(ident, str) or not ident or not isinstance(asset, str) or not asset
+                    or isinstance(annee, bool) or not isinstance(annee, int)):
+                continue
+            invites = [str(p)[:60] for p in (x.get("invites") or []) if isinstance(p, str)][:20]
+            date_aff = x.get("date_affichee") if isinstance(x.get("date_affichee"), str) else None
+            vus.add(ident)
+            self.base.executer("""
+                INSERT INTO avis_invite(id, asset, annee, environ, mot, date_affichee, invites, le, lu_le)
+                VALUES(?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET asset=excluded.asset, annee=excluded.annee, environ=excluded.environ,
+                    mot=excluded.mot, date_affichee=excluded.date_affichee, invites=excluded.invites, le=excluded.le,
+                    lu_le=excluded.lu_le""",
+                ident, asset, annee, 1 if x.get("environ") else 0, str(x.get("mot") or "")[:120] or None,
+                date_aff[:10] if date_aff else None, json.dumps(invites, ensure_ascii=False),
+                str(x.get("le") or "")[:40] or None, lu)
+        # un avis qui n'est plus chez Sillage (l'invité a changé d'avis) quitte la liste ; ceux à confirmer restent
+        for r in self.base.tous("SELECT id FROM avis_invite WHERE traite IS NULL"):
+            if r["id"] not in vus:
+                self.base.executer("DELETE FROM avis_invite WHERE id=?", r["id"])
+        self.base.ecrire("sillage_lu", {"le": lu, "avis": len(vus)})
+        self.base.ecrire("sillage_erreur", None)
+        return self.etat_sillage()
+
+    def etat_sillage(self) -> dict:
+        return {"relie": bool(self.cfg.jeton_sillage), "lu": self.base.lire("sillage_lu"),
+                "erreur": self.base.lire("sillage_erreur") if self.cfg.jeton_sillage else None,
+                "a_confirmer": self.base.valeur("SELECT COUNT(DISTINCT asset) FROM avis_invite WHERE traite IS NOT NULL") or 0}
+
+    def compter_recues(self) -> int:
+        """Photos qui attendent Julien (avis non traités), une par photo."""
+        return self.base.valeur("SELECT COUNT(DISTINCT asset) FROM avis_invite WHERE traite IS NULL") or 0
+
+    def recues(self) -> dict:
+        """Une ligne par photo : tous ses avis, la date actuelle dans Immich, l'estimation de Millésime s'il y en a une."""
+        par_photo: dict[str, list[dict]] = {}
+        for a in self.base.tous("SELECT * FROM avis_invite ORDER BY le, id"):
+            a["invites"] = json.loads(a["invites"] or "[]")
+            a["environ"] = bool(a["environ"])
+            par_photo.setdefault(a["asset"], []).append(a)
+        lignes, a_confirmer = [], []
+        for asset, avis in par_photo.items():
+            try:
+                infos = self.immich.asset(asset) or {}
+                date_immich = ((infos.get("exifInfo") or {}).get("dateTimeOriginal") or infos.get("localDateTime") or "")[:10] or None
+                lisible = True
+            except ErreurImmich:
+                date_immich, lisible = None, False
+            for a in avis:
+                a["deja_changee"] = bool(lisible and a["date_affichee"] and date_immich != a["date_affichee"][:10])
+            s = self.base.un("SELECT annee_proposee, marge, statut, annee_validee FROM scans WHERE asset_id=?", asset) or {}
+            estimation = ({"annee": s["annee_proposee"], "marge": s["marge"]}
+                          if s.get("annee_proposee") is not None and s.get("statut") != "validee" else None)
+            ligne = {"asset_id": asset, "avis": [{k: a[k] for k in ("id", "annee", "environ", "mot", "date_affichee",
+                                                                     "invites", "le", "deja_changee")} for a in avis],
+                     "annees": sorted({a["annee"] for a in avis}), "date_immich": date_immich,
+                     "date_lisible": lisible, "estimation": estimation,
+                     "deja_changee": any(a["deja_changee"] for a in avis)}
+            if any(a["traite"] for a in avis):
+                ligne["issue"] = next(a["traite"] for a in avis if a["traite"])
+                a_confirmer.append(ligne)
+            else:
+                ligne["tout_accepter"] = self._concorde(ligne)
+                lignes.append(ligne)
+        return {"lignes": lignes, "a_confirmer": a_confirmer, "sillage": self.etat_sillage()}
+
+    @staticmethod
+    def _concorde(ligne: dict) -> bool:
+        """« Tout accepter » : un seul avis, et il concorde (±2 ans) avec l'estimation de Millésime."""
+        est_ = ligne.get("estimation")
+        return (len(ligne["avis"]) == 1 and est_ is not None
+                and abs(ligne["avis"][0]["annee"] - est_["annee"]) <= ACCORD_TOUT_ACCEPTER)
+
+    def _avis_en_attente(self, asset_id: str) -> list[dict]:
+        avis = self.base.tous("SELECT * FROM avis_invite WHERE asset=? AND traite IS NULL", asset_id)
+        if not avis:
+            raise ErreurMillesime("Aucun avis d'invité en attente pour cette photo (déjà traitée, ou l'invité a changé d'avis).")
+        return avis
+
+    def _clore_avis(self, asset_id: str, issue: str) -> bool:
+        """Marque les avis de la photo traités ici, puis le dit à Sillage ; faux si Sillage n'a pas confirmé."""
+        self.base.executer("UPDATE avis_invite SET traite=?, traite_le=? WHERE asset=? AND traite IS NULL",
+                           issue, maintenant(), asset_id)
+        return self._confirmer_chez_sillage(asset_id, issue)
+
+    def traiter_avis(self, asset_id: str, geste: str, annee: int | None = None) -> dict:
+        """accepter (l'année d'un avis), corriger (une année tapée par Julien) ou ecarter. Accepter et corriger
+        écrivent par valider() avec la source « avis d'invité » ; écarter n'écrit rien dans Immich."""
+        avis = self._avis_en_attente(asset_id)
+        res: dict = {}
+        if geste == "ecarter":
+            issue = "ecartee"
+        elif geste in ("accepter", "corriger"):
+            if isinstance(annee, bool):
+                raise ErreurMillesime("Année illisible.")
+            try:
+                annee = int(annee)
+            except (TypeError, ValueError) as e:
+                raise ErreurMillesime("Année illisible.") from e
+            if geste == "accepter":
+                memes = [a for a in avis if a["annee"] == annee]
+                if not memes:
+                    raise ErreurMillesime(f"Aucun invité n'a proposé {annee} pour cette photo : utilise « Corriger ».")
+                marge = 3 if all(a["environ"] for a in memes) else 1      # « environ » : ±3 ans
+                issue = "acceptee"
+            else:
+                marge, issue = 1, "corrigee"
+            res = self.valider(asset_id, annee, marge, source=SOURCE_AVIS)
+        else:
+            raise ErreurMillesime("Geste inconnu.")
+        confirme = self._clore_avis(asset_id, issue)
+        return {**res, "issue": issue, "confirme": confirme,
+                "message": "" if confirme else "Sillage n'a pas répondu : à confirmer chez Sillage, nouvel essai à la prochaine lecture."}
+
+    def tout_accepter(self) -> dict:
+        """Accepte d'un geste les lignes à un seul avis qui concorde (±2 ans) avec l'estimation de Millésime."""
+        faites, a_confirmer, erreurs = 0, 0, []
+        for l in self.recues()["lignes"]:
+            if not l["tout_accepter"]:
+                continue
+            try:
+                r = self.traiter_avis(l["asset_id"], "accepter", l["avis"][0]["annee"])
+                faites += 1
+                a_confirmer += 0 if r["confirme"] else 1
+            except (ErreurMillesime, ErreurImmich) as e:
+                erreurs.append(str(e))
+                if len(erreurs) >= 3:
+                    break
+        return {"faites": faites, "a_confirmer": a_confirmer, "erreurs": erreurs[:3]}
 
     # ------------------------------------------------------------------ libellés suivis (2.10.0)
     def libelles(self) -> list[dict]:
@@ -1301,7 +1507,8 @@ class Millesime:
                 if al["nom"] in self.albums_non_datees():
                     self.immich.ajouter_album(al["id"], [aid])
         self.base.executer("UPDATE journal SET annule_le=? WHERE id=?", maintenant(), journal_id)
-        self.base.executer("UPDATE scans SET statut='a_analyser', annee_validee=NULL WHERE asset_id=?", aid)
+        # 2.13.0 : une photo datée sur l'avis d'un invité peut être un scan daté par tampon : son statut ne bouge pas
+        self.base.executer("UPDATE scans SET statut='a_analyser', annee_validee=NULL WHERE asset_id=? AND type='non_datee'", aid)
         est.recalculer_propositions(self.base, self.cfg.seuil_doute)
         return {"ok": True}
 

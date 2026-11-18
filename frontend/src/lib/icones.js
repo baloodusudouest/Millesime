@@ -9,6 +9,7 @@ export const ICONES = {
   trancher: '<path d="M12 4v16M5 8l7-4 7 4"/><path d="M5 8 2.8 13a2.6 2.6 0 0 0 4.4 0zM19 8l-2.2 5a2.6 2.6 0 0 0 4.4 0z"/>',
   nommer: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M15.5 6.5h5M15.5 10.5h5M17.5 14.5h3"/>',
   verifier: '<circle cx="11" cy="11" r="6"/><path d="m20 20-4.6-4.6M11 8.5v3.2M11 13.9v.1"/>',
+  recues: '<path d="M4 6.5h16v10H9l-4 3.5v-3.5H4z"/><path d="M8 10h8M8 13h5"/>',
   naissance: '<path d="M6 20v-7.5h12V20M4 20h16"/><path d="M12 12.5V8M12 5.2c.8.9.8 1.9 0 2.8-.8-.9-.8-1.9 0-2.8z"/>',
   // services de « Connexion »
   immich: '<rect x="3.5" y="5.5" width="17" height="13.5" rx="2"/><circle cx="9" cy="10.5" r="1.7"/><path d="m4.5 17.5 4.6-4.4 3.2 3 2.6-2.4 4.6 4.3"/>',

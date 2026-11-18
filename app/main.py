@@ -50,6 +50,18 @@ def _boucle_synchro(stop: threading.Event):
             m().reveil.clear()
 
 
+SILLAGE_MINUTES = 15             # 2.13.0 : lecture des dates signalées par les invités chez Sillage
+
+
+def _boucle_sillage(stop: threading.Event):
+    while not stop.is_set():
+        try:
+            m().lire_sillage()
+        except Exception as e:  # noqa: BLE001
+            log.warning("Lecture de Sillage en échec : %s", e)
+        stop.wait(SILLAGE_MINUTES * 60)
+
+
 @asynccontextmanager
 async def cycle(app: FastAPI):
     if "m" not in ETAT:
@@ -58,6 +70,7 @@ async def cycle(app: FastAPI):
     stop = threading.Event()
     if ETAT.get("synchro_auto", True):
         threading.Thread(target=_boucle_synchro, args=(stop,), daemon=True).start()
+        threading.Thread(target=_boucle_sillage, args=(stop,), daemon=True).start()
     yield
     stop.set()
     m().reveil.set()
@@ -122,9 +135,26 @@ async def _erreur_immich(_: Request, exc: ErreurImmich):
     return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
+def _a_traiter() -> dict:
+    """2.13.0 : le nombre « à traiter » pour la tuile de l'Anneau (nombres seulement, gardé 60 s : /health est
+    sondé chaque minute). Total = à dater + à trancher + à nommer + à vérifier + reçues des invités."""
+    garde = ETAT.get("sante")
+    if not garde or time.monotonic() - garde[0] > 60:
+        c = m().accueil()["compteurs"]
+        total = c["a_dater"] + c["a_trancher"] + c["a_nommer"] + c["suspects"] + c["recues_invites"]
+        garde = (time.monotonic(), {"a_traiter": total, "recues_invites": c["recues_invites"]})
+        ETAT["sante"] = garde
+    return garde[1]
+
+
 @app.get("/health")
 def sante():
-    return {"ok": True, "version": __version__}
+    try:
+        nombres = _a_traiter()
+    except Exception as e:  # noqa: BLE001 — la sonde répond toujours
+        log.warning("Nombre à traiter illisible : %s", e)
+        nombres = {}
+    return {"ok": True, "version": __version__, **nombres}
 
 
 # -- connexion -------------------------------------------------------------------
@@ -257,6 +287,35 @@ def detacher(asset_id: str, face_id: str):
 @app.post("/api/scans/{asset_id}/plusieurs")
 def plusieurs(asset_id: str):
     return m().plusieurs_annees(asset_id)
+
+
+# ---- 2.13.0 : reçues des invités (dates signalées dans Sillage)
+
+@app.get("/api/recues")
+def recues():
+    return m().recues()
+
+
+@app.post("/api/recues/relire")
+def relire_recues():
+    """Le bouton « Relire » : lecture tout de suite chez Sillage (sans attendre le tour de 15 min)."""
+    m().lire_sillage()
+    return m().recues()
+
+
+@app.post("/api/recues/tout-accepter")
+def tout_accepter_recues():
+    ecriture()
+    return m().tout_accepter()
+
+
+@app.post("/api/recues/{asset_id}/{geste}")
+def geste_recues(asset_id: str, geste: str, corps: dict = Body(default={})):
+    """accepter {annee} (l'année d'un avis), corriger {annee} (tapée par Julien), ecarter."""
+    if geste not in ("accepter", "corriger", "ecarter"):
+        raise HTTPException(404, "Geste inconnu.")
+    ecriture()
+    return m().traiter_avis(asset_id, geste, corps.get("annee"))
 
 
 # ---- 2.2.0 : ce que Millésime date (albums et dossiers choisis), et les noms d'albums des scans

@@ -10,6 +10,7 @@
   import Datables from './pages/Datables.svelte'
   import Nommer from './pages/Nommer.svelte'
   import Verifier from './pages/Verifier.svelte'
+  import Recues from './pages/Recues.svelte'
   import Services from './pages/Services.svelte'
   import Reglages from './pages/Reglages.svelte'
 
@@ -22,7 +23,7 @@
   // Anciennes adresses (1.x) : elles mènent au nouvel écran qui a repris leur contenu
   const ANCIENNES = { accueil: 'a-traiter', calcul: 'connexion/pc', journal: 'reglages' }
   // Files ouvertes par une tuile : elles appartiennent à « À traiter »
-  const FILES = ['trancher', 'nommer', 'verifier', 'datables']
+  const FILES = ['trancher', 'nommer', 'verifier', 'datables', 'recues']
 
   // #page ou #page/paramètre (ex. #nommer/<id d'un groupe>, #connexion/pc)
   const lire = () => {
@@ -41,7 +42,7 @@
     try { compteurs = (await api.get('/api/accueil')).compteurs } catch {}
   }
   window.addEventListener('hashchange', () => { route = lire(); if (session.connecte) compter() })
-  const aDecider = $derived(compteurs ? compteurs.a_trancher + compteurs.a_nommer + compteurs.suspects : 0)
+  const aDecider = $derived(compteurs ? compteurs.a_trancher + compteurs.a_nommer + compteurs.suspects + (compteurs.recues_invites || 0) : 0)
 
   api.get('/api/session').then((s) => {
     session.connecte = s.connecte; session.version = s.version; session.lecture_seule = !!s.lecture_seule
@@ -92,6 +93,7 @@
     {:else if page === 'datables'}<Datables />
     {:else if page === 'nommer'}<Nommer cible={route.param} />
     {:else if page === 'verifier'}<Verifier />
+    {:else if page === 'recues'}<Recues />
     {:else if page === 'connexion'}<Services service={route.param} />
     {:else if page === 'reglages'}<Reglages {deconnecter} />
     {:else}<ATraiter />{/if}

@@ -29,6 +29,7 @@ Utilisateur unique, sur iPhone et sur PC, par le réseau local et Tailscale.
 - **Calculateur du PC** (`pc/`, `mesure/`) : conteneur Docker Desktop qui interroge l'appli (`/api/calcul/*`) avec un jeton partagé.
 - **carnet** : lit `GET /api/etat` avec un jeton (depuis la 2.12.0 : le jeton commun `MAISON_JETON` seul).
 - **Anneau** (2.12.0) : collecte chaque nuit les réglages d'usage par `GET /externe/sauvegarde` (jeton commun) ; « Restaurer les réglages » les relit chez lui.
+- **Sillage** (2.13.0) : Millésime lit les dates signalées par les invités (`GET /externe/signalements`, jeton commun, contrat 1, toutes les 15 min ; `MILLESIME_SILLAGE_URL`, défaut `http://sillage:8093`) et, après le geste de Julien, ferme les avis de la photo (`POST /externe/signalements/traite`). Tuile « Reçues des invités ».
 - **Home Assistant** : depuis la 2.8.0, lit `GET /ha/etat` (jeton `MILLESIME_JETON_HA`, nombres seulement) toutes les 10 min ; package HA `systeme/millesime.yaml` (capteurs, rappel d'allumer le PC).
 - **Connexion** : mot de passe unique, session par cookie. Depuis la 2.12.0 : mot de passe commun `MAISON_PASSWORD` seul (avant : `MILLESIME_PASSWORD`, valeur de `CARNET_PASSWORD`).
 - **Publication** : GitHub Actions lance les tests du back et compile l'interface, puis publie `ghcr.io/baloodusudouest/millesime` (`latest`, version, commit). Watchtower désactivé : mise à jour manuelle dans Portainer.

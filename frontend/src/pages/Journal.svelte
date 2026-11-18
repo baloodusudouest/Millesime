@@ -16,7 +16,9 @@
                  album_non_datees: 'album des non datés', modele_album: 'album par année', libelles: 'libellés suivis' }
   const REGLAGE = ['reglage_repris', 'reglages_restaures']
   function libelle(j) {
-    if (j.action === 'valider') return `Datée ${j.apres.tag?.split('/').pop() ?? ''}, album « ${j.apres.album} »`
+    // 2.13.0 : une photo datée sur l'avis d'un invité (Sillage) le dit ; une photo hors scans n'a pas d'album
+    if (j.action === 'valider') return `Datée ${j.apres.tag?.split('/').pop() ?? ''}` + (j.apres.album ? `, album « ${j.apres.album} »` : '')
+      + (j.apres.source ? ` (${j.apres.source})` : '')
     if (j.action === 'plusieurs') return 'Mise de côté : plusieurs années'
     if (j.action === 'nommer') return `Groupe de visages nommé « ${j.apres.nom} »`
     if (j.action === 'detacher') return `Visage retiré de ${j.avant.nom || 'la personne'} (ce n'était pas elle)`

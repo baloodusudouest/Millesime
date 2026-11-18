@@ -65,6 +65,21 @@ CREATE TABLE IF NOT EXISTS sources (
     ajoutee_le  TEXT NOT NULL,
     demandee_le TEXT                       -- dossier : demande de passage envoyée à Transhumance
 );
+-- 2.13.0 : dates signalées par les invités, lues chez Sillage (dernière lecture gardée si Sillage ne répond plus)
+CREATE TABLE IF NOT EXISTS avis_invite (
+    id            TEXT PRIMARY KEY,          -- identifiant de l'avis chez Sillage
+    asset         TEXT NOT NULL,             -- identifiant Immich de la photo
+    annee         INTEGER NOT NULL,          -- « Vers quelle année ? »
+    environ       INTEGER NOT NULL DEFAULT 0,
+    mot           TEXT,                      -- souvenir libre de l'invité (texte brut, 120 caractères au plus)
+    date_affichee TEXT,                      -- date que l'invité voyait (NULL : photo de « Aidez-moi à dater »)
+    invites       TEXT,                      -- JSON : prénoms de l'invitation
+    le            TEXT,                      -- envoyé le (chez Sillage)
+    lu_le         TEXT NOT NULL,             -- dernière lecture chez Sillage
+    traite        TEXT,                      -- NULL : à traiter ; acceptee | corrigee | ecartee : à confirmer chez Sillage
+    traite_le     TEXT
+);
+CREATE INDEX IF NOT EXISTS avis_invite_asset ON avis_invite(asset);
 """
 
 

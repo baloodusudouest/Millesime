@@ -2,8 +2,15 @@
 
 Fichier à lire en premier dans une nouvelle session, et à mettre à jour à chaque fin de session, dans le même commit que le code.
 
-## État (16/11/2026)
+## État (18/11/2026)
 
+- **2.13.0 (18/11/2026)** : tuile « Reçues des invités » (dates signalées dans Sillage 0.17, contrat 1). Dossier : `sillage-recit-signalements-dossier.md` § 5 (coffre / projet).
+  - `service.py`, section « reçues des invités (2.13.0) » : `lire_sillage()` (confirmations en attente refaites d'abord, sauf en lecture seule, puis `GET /externe/signalements` ; contrat ≠ 1, 401, 404, panne → `sillage_erreur` dans `reglages`, dernière lecture gardée ; avis disparus de Sillage effacés s'ils n'étaient pas traités), `recues()` (une ligne par photo, date d'Immich lue en direct, estimation de la table `scans`, `deja_changee`, `tout_accepter`), `traiter_avis(asset, geste, annee)`, `tout_accepter()`, `_clore_avis()` (marque `traite` puis POST ; succès : lignes effacées), `compter_recues()`, `etat_sillage()`. Table `avis_invite` (`base.py`).
+  - `valider(asset, annee, marge, source=None)` : `source="avis d'invité"` est noté au journal (`apres.source`) et permet une photo hors scans (photo d'appareil, scan daté) : date et tag seulement, pas d'album, pas de borne d'envoi. `annuler()` ne remet plus `a_analyser` que pour un scan `non_datee`.
+  - `main.py` : `_boucle_sillage` (15 min, avec la boucle de synchro), routes `/api/recues…`, `/health` avec `a_traiter` et `recues_invites` (gardés 60 s dans `ETAT["sante"]`).
+  - Interface : `pages/Recues.svelte` (`#recues`, file d'À traiter), tuile dans `ATraiter.svelte`, icône `recues`, badge de l'onglet, libellé du journal.
+  - Tests : `tests/faux_sillage.py` (contrat 1) et `test_2130_*` dans `tests/test_app.py`.
+  - **Jamais essayé avec le vrai Sillage ni sur la vraie installation.** L'Anneau ne lit pas encore `a_traiter` dans `/health` (sa veille ne regarde que le code de réponse).
 - **2.12.0 (16/11/2026)** : chantier B (réglages dans l'appli, sauvegarde, restauration) et anciens noms retirés. `app/maison.py` passe au **contrat 2** (copie du socle, empreinte testée, jamais retouchée).
   - **Réglages d'usage** (`service.py`, section « réglages d'usage (2.12.0) » ; `REGLAGES_DEFAUTS`, `_valider_reglage`) : `tag_prefixe` (texte, sans « / », vide refusé tant que Chambre noire n'est pas reliée), `synchro_minutes` (entier 5–1440, défaut 60), `album_non_datees`, `modele_album` (doit contenir `{annee}`), `libelles` (anciens libellés suivis, sans l'actuel). Tous dans la table `reglages` de la base (stockage gardé : albums depuis la 2.2.0, libellés depuis la 2.10.0 ; les deux nouveaux y vont aussi plutôt que dans un `reglages.json` à part, pour qu'il n'y ait qu'un endroit). `Millesime.reglages()` les rend en dict, `changer_reglages()` vérifie tout puis écrit.
   - **Reprise** (`_reprendre_reglages`, appelé par `Millesime.__init__`) : clé absente de la table → valeur de l'ancienne variable (`config.REPRISES`), ligne `reglage_repris` au journal ; la clé est écrite même vide, la variable n'est plus jamais lue.
@@ -24,6 +31,7 @@ Fichier à lire en premier dans une nouvelle session, et à mettre à jour à ch
 
 ## Prochaine étape
 
+00. **2.13.0** : ajouter `MILLESIME_SILLAGE_URL=http://sillage:8093` à la stack (facultatif : c'est le défaut) ; Sillage doit être en 0.17 avec le même `MAISON_JETON`. Vérifier : un avis d'essai envoyé depuis une vue d'invité apparaît dans « Reçues des invités » après « Relire » ; Écarter, puis la marque « signalé » disparaît chez l'invité. Coffre : flux `Millésime → Sillage` (lecture des signalements), variable, note de Millésime.
 0. **Passage à la 2.12.0 — déploiement en deux temps** : d'abord la nouvelle image avec la stack actuelle (les réglages sont repris des anciennes variables au premier démarrage), vérifier Réglages (Lecture d'Immich : libellé et relecture ; albums ; journal : lignes « repris de la stack »), puis la nouvelle stack sans les anciennes lignes (`MILLESIME_PASSWORD`, `MILLESIME_JETON_CARNET`, `MILLESIME_TAG_PREFIXE`, `MILLESIME_JETON_CHAMBRE_NOIRE`, `MILLESIME_ALBUM_NON_DATEES`, `MILLESIME_MODELE_ALBUM`, `MILLESIME_JETON_TRANSHUMANCE`, `MILLESIME_SYNCHRO_MINUTES`). Avant le premier temps : `MAISON_PASSWORD` (12 caractères au moins) et `MAISON_JETON` doivent être dans la stack de Millésime, sinon il ne démarre pas / carnet ne lit plus `/api/etat`. Côté carnet, `CARNET_MILLESIME_JETON` doit valoir `MAISON_JETON`. Jamais essayé sur la vraie installation.
 1. **Mise en service** (à faire avec Julien, rien n'a encore été essayé sur la vraie installation depuis la 1.5) : sauvegarde d'Immich ; `MILLESIME_LECTURE_SEULE=oui` et `MILLESIME_VERSION=2.8.0` dans Portainer ; vérifier la version dans Réglages ; Sources (albums et dossiers listés ? sinon droit `folder.read` de la clé) ; Datables ; un jour à regarder ; puis lecture seule retirée, une validation réelle et son Annuler.
 2. **Home Assistant** : `MILLESIME_JETON_HA` dans la stack, package `systeme/millesime.yaml` v1.0 (master doc 1.78), deux secrets, redémarrage.
@@ -40,6 +48,8 @@ Fichier à lire en premier dans une nouvelle session, et à mettre à jour à ch
 
 ## Pièges
 
+- 2.13.0 : `POST /externe/signalements/traite` ferme **tous** les avis non traités de la photo chez Sillage, même un avis arrivé après la dernière lecture (Julien ne l'a pas vu). Annuler une datation acceptée ne rouvre pas l'avis chez Sillage.
+- 2.13.0 : `/health` lit la base (compteurs de l'accueil) au plus une fois par minute ; une erreur n'empêche jamais la sonde de répondre `ok`.
 - 2.0 : l'écran « Connexion » (les services) est `frontend/src/pages/Services.svelte` ; `pages/Connexion.svelte` est la page du mot de passe.
 - 2.0 : le thème garde les noms de couleurs d'origine (`verre`, `etiquette`, `lie`, `or`…) ; seules leurs valeurs ont changé. Le clair se fait par `prefers-color-scheme`.
 - `tests/test_app.py::test_160_ce_que_valider_envoie_a_immich` fige les écritures : s'il échoue, c'est que quelque chose a changé dans ce que Millésime écrit dans la photothèque.

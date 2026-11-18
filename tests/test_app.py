@@ -1303,3 +1303,197 @@ def test_m29_fusion_refusee_notee_en_echec_et_annulation_incomplete_dite(env):
     assert next(f for x in E["assets"].values() for f in x["faces"] if f["id"] == faces[0])["person"]["id"] == "mamie"
     j = next(x for x in client.get("/api/journal").json() if x["id"] == j["id"])
     assert j["annule_le"] and j["apres"]["non_defaits"] == [faces[0]]
+
+
+# ------------------------------------------------------------------ 2.13.0 : reçues des invités (dates signalées dans Sillage)
+
+import faux_sillage  # noqa: E402
+
+
+@pytest.fixture
+def sillage(env):
+    """Faux Sillage (contrat 1) relié à Millésime par le jeton commun ; scans synchronisés et calculés."""
+    client, E = env
+    from app import main
+    serveur, url, S = faux_sillage.demarrer(JK)
+    mm = main.m()
+    mm.cfg.jeton_sillage, mm.cfg.sillage_url = JK, url
+    connecter(client)
+    client.post("/api/synchroniser")
+    calculer(client, E)
+    yield client, E, S, mm
+    serveur.shutdown()
+
+
+def _ligne(r, asset):
+    return next(l for l in r["lignes"] + r["a_confirmer"] if l["asset_id"] == asset)
+
+
+def test_2130_lecture_et_accepter_une_photo_d_appareil(sillage):
+    """Lecture chez Sillage, une ligne par photo, compteur dans À traiter et dans /health ; « Accepter 2015 » passe
+    par valider (date, tag ±3 car « environ », journal « avis d'invité », Annuler), puis traite chez Sillage."""
+    client, E, S, mm = sillage
+    from app import main
+    S["avis"] += [faux_sillage.avis("s1", "num2014", 2013, date_affichee="2014-03-01", invites=["Prénom A", "Prénom B"]),
+                  faux_sillage.avis("s2", "num2014", 2015, environ=True, mot="mariage d'une cousine", date_affichee="2014-03-01"),
+                  faux_sillage.avis("s3", "nd0", 1992)]
+    assert client.get("/api/recues").json()["lignes"] == []                     # rien tant qu'on n'a pas lu
+    r = client.post("/api/recues/relire").json()
+    assert S["requetes"][-1] == ("GET", "/externe/signalements", None)
+    assert r["sillage"]["relie"] and r["sillage"]["lu"]["avis"] == 3 and r["sillage"]["erreur"] is None
+    l = _ligne(r, "num2014")
+    assert l["annees"] == [2013, 2015] and l["date_immich"] == "2014-03-01" and l["estimation"] is None
+    assert [a["invites"] for a in l["avis"]] == [["Prénom A", "Prénom B"], ["Prénom A"]] and not l["deja_changee"]
+    assert _ligne(r, "nd0")["estimation"]["annee"] is not None
+    acc = client.get("/api/accueil").json()
+    assert acc["compteurs"]["recues_invites"] == 2 and acc["sillage"]["relie"]
+    main.ETAT.pop("sante", None)
+    sante = client.get("/health").json()
+    c = acc["compteurs"]
+    assert sante["recues_invites"] == 2
+    assert sante["a_traiter"] == c["a_dater"] + c["a_trancher"] + c["a_nommer"] + c["suspects"] + 2
+
+    # une année qu'aucun invité n'a proposée se corrige, elle ne s'accepte pas
+    assert client.post("/api/recues/num2014/accepter", json={"annee": 2010}).status_code == 400
+    E["requetes"].clear()
+    r = client.post("/api/recues/num2014/accepter", json={"annee": 2015}).json()
+    assert r["issue"] == "acceptee" and r["confirme"] and r["tag"] == "Date estimée/2015 ±3"
+    tag = next(t["id"] for t in E["tags"].values() if t["value"] == "Date estimée/2015 ±3")
+    assert [(m_, c_) for m_, c_, _ in E["requetes"]] == [               # photo d'appareil : date et tag, aucun album
+        ("PUT", "/api/assets/num2014"), ("PUT", "/api/tags"), ("PUT", f"/api/tags/{tag}/assets")]
+    assert E["assets"]["num2014"]["exifInfo"]["dateTimeOriginal"] == "2015-07-01T12:00:00.000Z"
+    assert S["requetes"][-1] == ("POST", "/externe/signalements/traite", {"asset": "num2014", "issue": "acceptee"})
+    assert S["traites"] == {"s1": "acceptee", "s2": "acceptee"}                     # tous les avis de la photo
+    j = client.get("/api/journal").json()[0]
+    assert j["action"] == "valider" and j["asset_id"] == "num2014" and j["apres"]["source"] == "avis d'invité"
+    r = client.get("/api/recues").json()
+    assert [l["asset_id"] for l in r["lignes"]] == ["nd0"] and r["a_confirmer"] == []
+    assert client.get("/api/accueil").json()["compteurs"]["recues_invites"] == 1
+    # même Annuler qu'« À dater »
+    assert client.post(f"/api/journal/{j['id']}/annuler").json()["ok"]
+    assert E["assets"]["num2014"]["exifInfo"]["dateTimeOriginal"] == "2014-03-01T09:00:00.000Z"
+    assert "num2014" not in E["tag_assets"][tag]
+
+
+def test_2130_traite_en_echec_puis_repris_sans_reecrire(sillage):
+    """Le POST traite échoue : l'écriture dans Immich est faite une fois, la ligne reste « à confirmer chez Sillage »,
+    et la lecture suivante refait seulement le POST."""
+    client, E, S, _ = sillage
+    S["avis"].append(faux_sillage.avis("s1", "nd0", 1992))
+    client.post("/api/recues/relire")
+    S["panne_traite"] = True
+    r = client.post("/api/recues/nd0/accepter", json={"annee": 1992}).json()
+    assert r["confirme"] is False and "à confirmer chez Sillage" in r["message"]
+    assert E["assets"]["nd0"]["exifInfo"]["dateTimeOriginal"] == "1992-07-01T12:00:00.000Z"
+    r = client.get("/api/recues").json()
+    assert r["lignes"] == [] and [l["asset_id"] for l in r["a_confirmer"]] == ["nd0"]
+    assert r["a_confirmer"][0]["issue"] == "acceptee" and r["sillage"]["a_confirmer"] == 1
+    assert client.get("/api/accueil").json()["compteurs"]["recues_invites"] == 0
+    # Sillage revient : la relecture confirme, sans rien réécrire dans Immich
+    S["panne_traite"] = False
+    E["requetes"].clear()
+    S["requetes"].clear()
+    r = client.post("/api/recues/relire").json()
+    assert S["requetes"] == [("POST", "/externe/signalements/traite", {"asset": "nd0", "issue": "acceptee"}),
+                             ("GET", "/externe/signalements", None)]
+    assert E["requetes"] == [] and r["a_confirmer"] == [] and r["lignes"] == [] and S["traites"] == {"s1": "acceptee"}
+    assert len([j for j in client.get("/api/journal").json() if j["asset_id"] == "nd0"]) == 1
+
+
+def test_2130_ecarter_et_corriger(sillage):
+    """Écarter : seulement traite chez Sillage. Corriger : l'année tapée par Julien, marge 1."""
+    client, E, S, _ = sillage
+    S["avis"] += [faux_sillage.avis("s1", "nd0", 1970), faux_sillage.avis("s2", "nd2", 1950, environ=True)]
+    client.post("/api/recues/relire")
+    E["requetes"].clear()
+    r = client.post("/api/recues/nd0/ecarter").json()
+    assert r["issue"] == "ecartee" and r["confirme"] and E["requetes"] == []
+    assert S["traites"] == {"s1": "ecartee"}
+    assert client.post("/api/recues/nd0/ecarter").status_code == 400                # plus rien en attente
+    r = client.post("/api/recues/nd2/corriger", json={"annee": 1996}).json()
+    assert r["issue"] == "corrigee" and r["tag"] == "Date estimée/1996 ±1"
+    assert S["traites"]["s2"] == "corrigee"
+    assert client.post("/api/recues/nd2/inventer").status_code == 404
+
+
+def test_2130_tout_accepter_seulement_si_un_avis_concorde(sillage):
+    """« Tout accepter » : seulement les lignes à un seul avis, à ±2 ans de l'estimation de Millésime."""
+    client, E, S, _ = sillage
+    est_ = {a: client.get(f"/api/scans/{a}").json()["annee_proposee"] for a in ("nd0", "nd2", "nd4")}
+    assert all(v is not None for v in est_.values())
+    S["avis"] += [faux_sillage.avis("s1", "nd0", est_["nd0"] + 2),                              # concorde
+                  faux_sillage.avis("s2", "nd2", est_["nd2"] - 9),                              # trop loin
+                  faux_sillage.avis("s3", "nd4", est_["nd4"]), faux_sillage.avis("s4", "nd4", est_["nd4"]),   # deux avis
+                  faux_sillage.avis("s5", "num2020", 2020)]                                     # pas d'estimation
+    r = client.post("/api/recues/relire").json()
+    assert {l["asset_id"]: l["tout_accepter"] for l in r["lignes"]} == {
+        "nd0": True, "nd2": False, "nd4": False, "num2020": False}
+    r = client.post("/api/recues/tout-accepter").json()
+    assert r == {"faites": 1, "a_confirmer": 0, "erreurs": []}
+    assert E["assets"]["nd0"]["exifInfo"]["dateTimeOriginal"] == f"{est_['nd0'] + 2}-07-01T12:00:00.000Z"
+    assert set(S["traites"]) == {"s1"}
+    assert {l["asset_id"] for l in client.get("/api/recues").json()["lignes"]} == {"nd2", "nd4", "num2020"}
+
+
+def test_2130_date_deja_changee_et_mot_echappe(sillage):
+    """La date d'Immich a changé depuis l'avis : c'est dit. Le mot libre reste du texte brut (120 caractères),
+    affiché échappé : la page n'utilise jamais {@html}."""
+    client, E, S, _ = sillage
+    mot = "<img src=x onerror=alert(1)> baptême " + "x" * 200
+    S["avis"] += [faux_sillage.avis("s1", "num2008", 2007, mot=mot, date_affichee="2005-07-01"),
+                  faux_sillage.avis("s2", "num2020", 2019, date_affichee="2020-03-01"),
+                  faux_sillage.avis("s3", "nd-remi", 1995, date_affichee=None)]       # « Aidez-moi à dater »
+    r = client.post("/api/recues/relire").json()
+    l = _ligne(r, "num2008")
+    assert l["deja_changee"] and l["avis"][0]["deja_changee"]
+    assert l["avis"][0]["mot"] == mot[:120] and l["avis"][0]["mot"].startswith("<img src=x")
+    assert not _ligne(r, "num2020")["deja_changee"] and not _ligne(r, "nd-remi")["deja_changee"]
+    page = (Path(__file__).resolve().parents[1] / "frontend/src/pages/Recues.svelte").read_text(encoding="utf-8")
+    assert "{@html" not in page and "{a.mot}" in page
+
+
+def test_2130_sillage_injoignable_ou_refuse(sillage):
+    """Sillage arrêté, jeton refusé ou contrat inconnu : la dernière lecture reste, le message est dans la tuile.
+    Un avis retiré par l'invité (changer d'avis) quitte la liste à la lecture suivante."""
+    client, _, S, mm = sillage
+    S["avis"] += [faux_sillage.avis("s1", "nd0", 1992), faux_sillage.avis("s2", "nd2", 1996)]
+    client.post("/api/recues/relire")
+    S["panne"] = True
+    r = client.post("/api/recues/relire").json()
+    assert len(r["lignes"]) == 2 and "503" in r["sillage"]["erreur"]["detail"]
+    assert "503" in client.get("/api/accueil").json()["sillage"]["erreur"]["detail"]
+    S["panne"] = False
+    S["contrat"] = 2
+    r = client.post("/api/recues/relire").json()
+    assert len(r["lignes"]) == 2 and "contrat" in r["sillage"]["erreur"]["detail"]
+    S["contrat"] = 1
+    mm.cfg.jeton_sillage = "autre-jeton"
+    assert "jeton refusé" in client.post("/api/recues/relire").json()["sillage"]["erreur"]["detail"]
+    mm.cfg.jeton_sillage = JK
+    S["avis"] = [a for a in S["avis"] if a["id"] != "s2"]                            # l'invité a changé d'avis
+    r = client.post("/api/recues/relire").json()
+    assert [l["asset_id"] for l in r["lignes"]] == ["nd0"] and r["sillage"]["erreur"] is None
+    url = mm.cfg.sillage_url
+    mm.cfg.sillage_url = "http://127.0.0.1:9"                                        # rien n'écoute
+    r = client.post("/api/recues/relire").json()
+    assert len(r["lignes"]) == 1 and "ne répond pas" in r["sillage"]["erreur"]["detail"]
+    mm.cfg.sillage_url = url
+    mm.cfg.jeton_sillage = ""                                                         # non relié : rien n'est lu
+    S["requetes"].clear()
+    assert client.post("/api/recues/relire").json()["sillage"]["relie"] is False and S["requetes"] == []
+
+
+def test_2130_lecture_seule_gestes_refuses(sillage):
+    """Lecture seule : accepter, corriger, écarter et tout accepter sont refusés ; rien chez Sillage ni dans Immich."""
+    client, E, S, mm = sillage
+    S["avis"].append(faux_sillage.avis("s1", "nd0", 1992))
+    client.post("/api/recues/relire")
+    mm.cfg.lecture_seule = mm.immich.lecture_seule = True
+    E["requetes"].clear()
+    S["requetes"].clear()
+    for chemin, corps in (("/api/recues/nd0/accepter", {"annee": 1992}), ("/api/recues/nd0/corriger", {"annee": 1990}),
+                          ("/api/recues/nd0/ecarter", {}), ("/api/recues/tout-accepter", {})):
+        r = client.post(chemin, json=corps)
+        assert r.status_code == 409 and "lecture seule" in r.json()["detail"]
+    assert E["requetes"] == [] and S["requetes"] == [] and S["traites"] == {}
+    assert len(client.post("/api/recues/relire").json()["lignes"]) == 1          # la lecture continue

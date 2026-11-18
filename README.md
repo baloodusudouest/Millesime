@@ -12,7 +12,8 @@ Dater les photos papier numérisées à partir de l'âge des visages qu'elles co
 | À trancher | Cas douteux : marge trop large, visages en désaccord, aucun visage exploitable |
 | Nommer | Groupes de visages sans nom sur les scans : nouveau nom, ou rattachement à une personne d'Immich (suggestions, aperçu côte à côte, fusion annulable) ; un visage touché s'affiche en grand |
 | À vérifier | Visages dont l'âge estimé contredit l'âge connu, signe d'un groupe mélangé ou d'une naissance fausse |
-| À traiter | Bilan (photos datées sur le total) et une tuile par file : À dater, À trancher, À nommer, À vérifier, Sans naissance, À calculer sur le PC |
+| À traiter | Bilan (photos datées sur le total) et une tuile par file : À dater, Datables par le nom, À trancher, À nommer, À vérifier, Reçues des invités (2.13), Sans naissance, À calculer sur le PC |
+| Reçues des invités (2.13) | Les années que les invités proposent dans Sillage (« Pas la bonne année ? »), une ligne par photo : tous les avis (année, « environ », souvenir, prénoms), date actuelle dans Immich, estimation de Millésime, « date déjà changée depuis l'avis » ; Accepter (une année d'avis), Corriger, Écarter, Tout accepter (un seul avis à ±2 ans de l'estimation), Relire |
 | Connexion | Une tuile par service : Immich (relecture), Calculateur du PC (état, mode d'emploi), carnet |
 | Réglages | Précision de l'indice, lecture d'Immich (libellé, fréquence), sources et noms d'albums, libellés suivis, restaurer les réglages (sauvegarde de l'Anneau), journal de chaque écriture dans Immich avec Annuler, déconnexion |
 
@@ -50,6 +51,7 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
       - MILLESIME_IMMICH_CLE=${MILLESIME_IMMICH_CLE}
       - MILLESIME_JETON_CALCUL=${MILLESIME_JETON_CALCUL}
       - MILLESIME_JETON_HA=${MILLESIME_JETON_HA:-}       # 2.8 : jeton de Home Assistant (/ha/etat) ; vide : adresse fermée
+      - MILLESIME_SILLAGE_URL=http://sillage:8093      # 2.13 : dates signalées par les invités, lues chez Sillage avec MAISON_JETON
       # 2.12 : le libellé des numérisations, la relecture d'Immich et les noms d'albums se règlent dans Réglages.
       # Les anciennes lignes MILLESIME_TAG_PREFIXE, MILLESIME_SYNCHRO_MINUTES, MILLESIME_ALBUM_NON_DATEES et
       # MILLESIME_MODELE_ALBUM ne sont lues qu'une fois, au premier démarrage de la 2.12, pour reprendre leur valeur.
@@ -74,6 +76,7 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 | `MILLESIME_JETON_CALCUL` | — | Jeton partagé avec le calculateur du PC |
 | `MILLESIME_JETON_HA` | vide | Jeton de `GET /ha/etat`, lu par Home Assistant ; vide : adresse fermée (2.8) |
 | `MILLESIME_LECTURE_SEULE` | — | `oui` : rien n'est écrit dans Immich (premier jour d'une mise en service) ; `non` : écrit même si `MAISON_LECTURE_SEULE=oui` |
+| `MILLESIME_SILLAGE_URL` | `http://sillage:8093` | Adresse de Sillage dans la stack : les dates signalées par les invités y sont lues toutes les 15 min avec `MAISON_JETON` (2.13) ; `MAISON_JETON` vide : non relié |
 | `MILLESIME_SEUIL_DOUTE` | `4` | Marge (en années) au-delà de laquelle la photo va dans « À trancher » |
 | `MILLESIME_SEUIL_SUSPECT` | `12` | Écart d'âge, en années, qui rend un visage suspect |
 | `MILLESIME_TAG_NON_DATEE` | `Non datée` | Sous-tag des scans sans date |
@@ -127,7 +130,15 @@ L'Accueil et l'écran « Calcul sur le PC » montrent en direct l’état du PC 
 
 - `GET /api/etat` (Bearer `MAISON_JETON`) renvoie `a_analyser`, `a_dater`, `a_trancher`, `a_nommer`, `validees`, `sans_naissance` (personnes nommées sans date de naissance) et `message` (« allume le PC… »).
 - `GET /ha/etat` (Bearer `MILLESIME_JETON_HA`, 2.8) renvoie des nombres seulement : `a_dater`, `a_trancher`, `a_nommer`, `validees`, `total`, `sans_naissance` (un nombre), `a_analyser`, `pc` (`jamais_vu`, `indisponible`, `disponible`, `en_attente`, `en_cours`), `pc_pourcentage`, `pc_reste_min`, `pc_dernier_contact`.
+- `GET /health` (publique) : `ok`, `version` et, depuis la 2.13, des nombres seulement pour la tuile de l'Anneau : `a_traiter` (à dater + à trancher + à nommer + à vérifier + reçues des invités, gardé 60 s) et `recues_invites`.
 - `GET /externe/sauvegarde` (Bearer `MAISON_JETON`, 2.12 ; `MAISON_JETON` vide : 404) renvoie les réglages d'usage pour l'Anneau (contrat de sauvegarde 1 : `contrat`, `appli`, `version`, `le`, `reglages`), jamais une variable, un chemin ou un secret.
+
+### Ce que Millésime lit chez Sillage (2.13, contrat 1)
+
+- `GET {MILLESIME_SILLAGE_URL}/externe/signalements` (Bearer `MAISON_JETON`), toutes les 15 min et sur « Relire » → `{"contrat": 1, "signalements": [{"id", "asset", "annee", "environ", "mot", "date_affichee", "invites", "le"}]}` : les avis non traités. Gardés dans la table `avis_invite` ; Sillage injoignable, jeton refusé ou autre contrat : la dernière lecture reste et la tuile le dit. Un avis qui n'est plus rendu (l'invité a changé d'avis) quitte la liste.
+- `POST {MILLESIME_SILLAGE_URL}/externe/signalements/traite` `{"asset", "issue": "acceptee" | "corrigee" | "ecartee"}` → `{"fermes": n}`, après le geste de Julien : ferme tous les avis de la photo. S'il échoue, la ligne reste « à confirmer chez Sillage » et il est refait au début de la lecture suivante, sans rien réécrire dans Immich (pas en lecture seule).
+- Accepter et Corriger passent par la même écriture qu'« À dater » (1er juillet de l'année à midi, tag `Date estimée/AAAA ±1`, ±3 si « environ » ; albums seulement pour un scan tagué), notée au journal avec la source « avis d'invité » et annulable. Une photo d'appareil (hors scans) reçoit la date et le tag. Annuler ne rouvre pas l'avis chez Sillage.
+- Routes de l'interface (connexion requise) : `GET /api/recues`, `POST /api/recues/relire`, `POST /api/recues/{asset}/accepter|corriger` (`{"annee"}`), `POST /api/recues/{asset}/ecarter`, `POST /api/recues/tout-accepter` ; les gestes sont refusés en lecture seule (409).
 
 ## Test n°2 sur le PC (MiVOLO + vision locale)
 

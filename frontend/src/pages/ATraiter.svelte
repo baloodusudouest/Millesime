@@ -14,6 +14,9 @@
     { cle: 'trancher', lien: '#trancher', n: a.compteurs.a_trancher, nom: 'À trancher', resume: 'Marge large ou visages en désaccord' },
     { cle: 'nommer', lien: '#nommer', n: a.compteurs.a_nommer, nom: 'À nommer', resume: 'Groupes de visages sans nom' },
     { cle: 'verifier', lien: '#verifier', n: a.compteurs.suspects, nom: 'À vérifier', resume: 'Âge estimé qui contredit l\'âge connu' },
+    // 2.13.0 : années proposées par les invités dans Sillage ; Sillage injoignable : la dernière lecture reste, la tuile le dit
+    { cle: 'recues', lien: '#recues', n: a.compteurs.recues_invites, nom: 'Reçues des invités',
+      resume: a.sillage?.erreur ? 'Sillage injoignable : dernière lecture gardée' : a.sillage?.relie ? 'Années proposées par les invités de Sillage' : 'Sillage non relié' },
     { cle: 'naissance', lien: '#nommer', n: a.compteurs.sans_naissance, nom: 'Sans naissance', resume: 'À compléter dans carnet' },
     { cle: 'pc', lien: '#connexion/pc', n: attente, nom: pc.etat === 'en_cours' ? 'En calcul sur le PC' : 'À calculer sur le PC', resume: 'Visages en attente d\'analyse' },
   ] : [])

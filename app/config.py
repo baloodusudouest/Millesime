@@ -48,6 +48,9 @@ class Config:
     # 2.9.0 : noms des non datées lus dans Chambre noire (/externe/noms) ; jeton vide : noms des Réglages
     chambre_noire_url: str = "http://chambre-noire:8100"
     jeton_chambre_noire: str = ""   # 2.12.0 : MAISON_JETON seul
+    # 2.13.0 : dates signalées par les invités, lues chez Sillage (/externe/signalements) ; jeton vide : non relié
+    sillage_url: str = "http://sillage:8093"
+    jeton_sillage: str = ""         # MAISON_JETON seul
 
     @classmethod
     def depuis_env(cls) -> "Config":
@@ -58,7 +61,7 @@ class Config:
         cle = _env("MILLESIME_IMMICH_CLE")
         if not cle:
             raise RuntimeError("Variable MILLESIME_IMMICH_CLE absente : clé API Immich dédiée à Millésime.")
-        # 2.12.0 : demandes envoyées aux autres applis maison (Transhumance, Chambre noire, Anneau) : MAISON_JETON
+        # 2.12.0 : demandes envoyées aux autres applis maison (Transhumance, Chambre noire, Anneau ; Sillage en 2.13.0) : MAISON_JETON
         jeton = maison.jeton_a_envoyer()
         etat = Path(_env("MILLESIME_ETAT", "/state"))
         etat.mkdir(parents=True, exist_ok=True)
@@ -80,4 +83,6 @@ class Config:
             jeton_transhumance=jeton,
             chambre_noire_url=_env("MILLESIME_CHAMBRE_NOIRE_URL", "http://chambre-noire:8100").rstrip("/"),
             jeton_chambre_noire=jeton,
+            sillage_url=_env("MILLESIME_SILLAGE_URL", "http://sillage:8093").rstrip("/"),
+            jeton_sillage=jeton,
         )
