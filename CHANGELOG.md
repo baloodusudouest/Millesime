@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 2.15.1 — 20 novembre 2026 (socle 0.11.1)
+- Copies communes du socle 0.11.1 : sur une fiche « Connexion », le titre devient « Pour le relier » quand le réglage se fait dans Réglages de l'appli (et non dans la stack).
+- **Jamais essayé sur la vraie installation.**
+
 ## 2.15.0 — 20 novembre 2026 (fiches « Connexion » communes, contrat 3)
 - **Écran « Connexion » commun** des applis maison : `frontend/src/lib/services/Services.svelte` et `FicheService.svelte`, copiés du socle 0.11.0 tels quels (empreintes testées, jamais retouchés). Cinq services, donc des tuiles à voyant (deux colonnes sur téléphone) ; la fiche s'ouvre au toucher : point d'état et état en mots, Ce qui est lu, Ce qui est écrit, Vérifier (ne teste que ce service), « Pour le relier, dans la stack » quand il n'est pas réglé. Anciens écrans `pages/Services.svelte` et `pages/Calcul.svelte` retirés ; les liens `#connexion/pc` mènent à Connexion (la fiche ne s'ouvre plus d'elle-même).
 - **Serveur** (`app/main.py`, section « fiches Connexion ») : `GET /api/maison/services` et `POST /api/maison/services/{id}/verifier` (session de Millésime ou `ANNEAU_CLE`, jamais `MAISON_JETON`), `app/maison.py` du socle 0.11.0 (contrat 3). Services, textes repris de l'ancien écran :
