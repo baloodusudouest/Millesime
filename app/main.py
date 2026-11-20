@@ -77,7 +77,10 @@ def _lire_sillage_suivi() -> None:
     with maison.TACHES.tour(TACHE_SILLAGE):
         etat = m().lire_sillage()
         if etat and etat.get("erreur"):
+            SERVICES.noter("sillage", False, (etat["erreur"] or {}).get("detail"))     # 2.16.0 : la lecture sert d'essai
             raise _SillageMuet((etat["erreur"] or {}).get("detail") or "Sillage ne répond pas")
+        if etat:
+            SERVICES.noter("sillage", True, _phrase_sillage(etat))
 
 
 def _boucle_sillage(stop: threading.Event):
@@ -885,6 +888,34 @@ def _essai_chambre_noire():
     return True, f"Tag des non datées : {j.get('tag_non_datee')} ; album : {j.get('album_non_datees')}."
 
 
+def _phrase_sillage(etat: dict) -> str:
+    lu = (etat.get("lu") or {})
+    n, attente = lu.get("avis", 0), etat.get("a_confirmer") or 0
+    return (f"{n} date{'s' if n > 1 else ''} proposée{'s' if n > 1 else ''} par les invités à la dernière lecture"
+            + (f" ; {attente} photo{'s' if attente > 1 else ''} traitée{'s' if attente > 1 else ''} à confirmer chez Sillage." if attente else "."))
+
+
+def _essai_sillage():
+    """2.16.0 : lecture courte des dates proposées chez Sillage (GET /externe/signalements, jeton commun), sans les
+    garder ni rien confirmer : la lecture de toutes les 15 min (et « Relire ») reste seule à les mettre en usage."""
+    import requests
+    from .service import CONTRAT_SILLAGE
+    cfg = m().cfg
+    r = requests.get(cfg.sillage_url + "/externe/signalements", timeout=5,
+                     headers={"Authorization": f"Bearer {cfg.jeton_sillage}"})
+    if r.status_code == 404:
+        return False, "Sillage a répondu 404 (adresse fermée : MAISON_JETON vide chez lui)."
+    if r.status_code == 401:
+        return False, "Sillage a répondu 401 (jeton refusé)."
+    if r.status_code != 200:
+        return False, f"Sillage a répondu {r.status_code}."
+    j = r.json()
+    if not isinstance(j, dict) or j.get("contrat") != CONTRAT_SILLAGE or not isinstance(j.get("signalements"), list):
+        return False, f"Contrat inconnu : Millésime attend le contrat {CONTRAT_SILLAGE} de Sillage."
+    n = len(j["signalements"])
+    return True, f"{n} date{'s' if n > 1 else ''} proposée{'s' if n > 1 else ''} par les invités, en attente chez Sillage."
+
+
 SERVICES = maison.Services(APPLI)
 SERVICES.ajouter(
     "immich", "Immich",
@@ -935,6 +966,16 @@ SERVICES.ajouter(
     regle=lambda: bool(m().cfg.jeton_chambre_noire),
     reglage="MAISON_JETON",
     essai=_essai_chambre_noire)
+SERVICES.ajouter(
+    "sillage", "Sillage", genre="maison", cible="sillage",
+    lit="Les années que les invités proposent sous leurs photos dans Sillage (« Pas la bonne année ? ») : la photo, "
+        "l'année, « environ », le souvenir et les prénoms de l'invitation. Relues toutes les 15 minutes et sur « Relire », "
+        "elles arrivent dans « Reçues des invités ».",
+    ecrit="Quand tu acceptes, corriges ou écartes une proposition, Millésime dit à Sillage que la photo est traitée, et "
+          "Sillage ferme tous ses avis. Rien d'autre ; jamais en lecture seule.",
+    regle=lambda: bool(m().cfg.jeton_sillage),
+    reglage="MILLESIME_SILLAGE_URL et MAISON_JETON",
+    essai=_essai_sillage)
 # Monté APRÈS la garde : le dernier middleware ajouté passe en premier.
 maison.monter_services(app, SERVICES, lambda r: "sessions" in ETAT and ETAT["sessions"].connecte(r.cookies))
 

@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 2.16.0 — 20 novembre 2026 (fiche « Sillage » dans Connexion)
+- Sixième fiche « Connexion » : **Sillage** (maison, `cible="sillage"`). Lu : les années que les invités proposent sous leurs photos (« Pas la bonne année ? »), relues toutes les 15 minutes et sur « Relire », arrivées dans « Reçues des invités ». Écrit : « photo traitée » quand tu acceptes, corriges ou écartes (Sillage ferme ses avis), jamais en lecture seule. Le lien existait depuis la 2.13.0 sans fiche.
+- « Vérifier » : un GET `/externe/signalements` (jeton commun), rien de gardé ni confirmé. La lecture régulière de 15 minutes sert aussi d'essai (`SERVICES.noter`).
+- `MILLESIME_SILLAGE_URL` et `MAISON_JETON` (rien de nouveau dans la stack). Tests : `tests/test_fiches_connexion.py` (2 de plus), écran Connexion à six tuiles.
+- **Jamais essayé sur la vraie installation.**
+
 ## 2.15.1 — 20 novembre 2026 (socle 0.11.1)
 - Copies communes du socle 0.11.1 : sur une fiche « Connexion », le titre devient « Pour le relier » quand le réglage se fait dans Réglages de l'appli (et non dans la stack).
 - **Jamais essayé sur la vraie installation.**

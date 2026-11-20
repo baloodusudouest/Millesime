@@ -117,12 +117,12 @@ def test_20_a_traiter_en_tuiles(page):
 
 
 def test_20_connexion_par_service_et_reglages(page):
-    """2.15.0 : écran « Connexion » commun (contrat 3) : cinq tuiles à voyant, la fiche s'ouvre au toucher."""
+    """2.15.0 : écran « Connexion » commun (contrat 3) : six tuiles à voyant (2.16.0 : + Sillage), la fiche s'ouvre au toucher."""
     aller(page, "Connexion")
     services = page.locator("ul[aria-label='Services'] button[aria-expanded]")
     services.first.wait_for()
     noms = [n.split("\n")[0].strip() for n in services.all_inner_texts()]
-    assert noms == ["Immich", "Calculateur du PC", "carnet", "Home Assistant", "Chambre noire"]
+    assert noms == ["Immich", "Calculateur du PC", "carnet", "Home Assistant", "Chambre noire", "Sillage"]
     services.filter(has_text="Home Assistant").click()
     fiche = page.locator("#fiche-ouverte")
     fiche.get_by_role("heading", name="Home Assistant").wait_for()

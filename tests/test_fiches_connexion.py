@@ -7,7 +7,7 @@ import pytest
 
 from app import maison
 from app.main import APPLI
-from tests.test_app import JC, JH, JK, connecter, env, sans_variables_maison  # noqa: F401 (fixtures de test_app)
+from tests.test_app import JC, JH, JK, connecter, env, sans_variables_maison, sillage  # noqa: F401 (fixtures de test_app)
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def client(env):  # noqa: F811
 
 RACINE = Path(__file__).resolve().parent.parent
 CLE = "cle-anneau-de-test-1234567890"
-IDS = ["immich", "pc-calcul", "carnet", "home-assistant", "chambre-noire"]
+IDS = ["immich", "pc-calcul", "carnet", "home-assistant", "chambre-noire", "sillage"]
 CHAMPS = {"id", "nom", "genre", "cible", "etat", "lit", "ecrit", "reglage", "detail", "verifie_le", "guide",
           "derniere_ecriture", "gestes"}
 
@@ -58,7 +58,10 @@ def test_copies_communes_non_retouchees():
     assert maison.CONTRAT == 3 and maison.VERSION_SOCLE == "0.11.1"
     assert maison.empreinte_calculee() == maison.empreinte_ecrite()
     for nom in maison.FICHIERS_INTERFACE:
-        ecrite, calculee = maison.empreinte_interface(RACINE / "frontend" / "src" / "lib" / "services" / nom)
+        chemin = RACINE / "frontend" / "src" / "lib" / "services" / nom
+        if not chemin.exists():          # tests lancés dans l'image : les sources de l'interface n'y sont pas
+            continue
+        ecrite, calculee = maison.empreinte_interface(chemin)
         assert ecrite and ecrite == calculee, nom
 
 
@@ -158,4 +161,40 @@ def test_2150_synchroniser_sert_d_essai_a_immich(env):  # noqa: F811
     assert client.post("/api/synchroniser").status_code == 200
     f = {x["id"]: x for x in client.get("/api/maison/services").json()["services"]}["immich"]
     assert f["etat"] == "repond" and f["detail"].startswith("Relu :")
+    main.SERVICES._dernier.clear()
+
+
+# ------------------------------------------------------------------ 2.16.0 : fiche Sillage
+
+def test_2160_fiche_sillage(env):  # noqa: F811
+    """Sixième fiche : ce que Millésime lit chez Sillage et ce qu'il y écrit ; non reliée sans jeton commun."""
+    client, _ = env
+    connecter(client)
+    s = {x["id"]: x for x in client.get("/api/maison/services").json()["services"]}["sillage"]
+    assert (s["genre"], s["cible"]) == ("maison", "sillage") and not s["gestes"] and not s["guide"]
+    assert "Pas la bonne année ?" in s["lit"] and "Reçues des invités" in s["lit"]
+    assert "photo est traitée" in s["ecrit"]
+    assert s["etat"] == "pas_relie" and s["reglage"] == "MILLESIME_SILLAGE_URL et MAISON_JETON"
+
+
+def test_2160_verifier_sillage_lit_sans_rien_garder(sillage):  # noqa: F811
+    """Vérifier : un GET /externe/signalements, rien de gardé, aucun POST ; la lecture de 15 min sert aussi d'essai."""
+    client, _E, S, mm = sillage
+    from app import main
+    main.SERVICES._dernier.clear()
+    S["avis"].append({"id": "a1", "asset": "x1", "annee": 1987, "environ": False, "invites": ["Léa"]})
+    avant = len(S["requetes"])
+    f = client.post("/api/maison/services/sillage/verifier").json()
+    assert f["etat"] == "repond" and "1 date proposée" in f["detail"]
+    assert [r[0] for r in S["requetes"][avant:]] == ["GET"]
+    assert not mm.base.tous("SELECT id FROM avis_invite")                     # rien n'est gardé par Vérifier
+    S["panne"] = True
+    main.SERVICES._dernier.clear()
+    f = client.post("/api/maison/services/sillage/verifier").json()
+    assert f["etat"] == "ne_repond_pas" and "503" in f["detail"]
+    S["panne"] = False
+    main.SERVICES._dernier.clear()
+    main._lire_sillage_suivi()                                                 # la lecture régulière note l'essai
+    f = {x["id"]: x for x in client.get("/api/maison/services").json()["services"]}["sillage"]
+    assert f["etat"] == "repond" and "dernière lecture" in f["detail"]
     main.SERVICES._dernier.clear()
