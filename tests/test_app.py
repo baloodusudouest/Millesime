@@ -977,7 +977,7 @@ def _env_minimal(monkeypatch, tmp_path):
 
 def test_2110_module_maison_non_retouche():
     from app import maison
-    assert maison.CONTRAT == 2 and maison.CONTRAT_SAUVEGARDE == 1
+    assert maison.CONTRAT == 3 and maison.CONTRAT_SAUVEGARDE == 1
     assert maison.empreinte_calculee() == maison.empreinte_ecrite()
 
 

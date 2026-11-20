@@ -28,12 +28,28 @@
   --color-alerte: #ef7b72;
   --color-ombre: rgb(0 0 0 / 0.5);
 
+  /* 2.15.0 : jetons attendus par l'écran « Connexion » commun (lib/services/, copiés du socle, écrits pour
+     shadcn-svelte) : alias vers les couleurs de Millésime, sans toucher aux fichiers communs. */
+  --color-background: var(--color-verre);
+  --color-foreground: var(--color-etiquette);
+  --color-card: var(--color-verre-2);
+  --color-card-foreground: var(--color-etiquette);
+  --color-border: var(--color-filet);
+  --color-input: var(--color-champ);
+  --color-muted-foreground: var(--color-craie);
+  --color-primary: var(--color-lie);
+  --color-primary-foreground: var(--color-sur-lie);
+  --color-destructive: var(--color-alerte);
+
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-millesime: "Bodoni Moda Variable", "Didot", Georgia, serif;
 }
 
 @layer base {
   html { color-scheme: dark; -webkit-text-size-adjust: 100%; }
+  /* 2.15.0 : « border » seul (fiches communes) prend le filet, comme dans shadcn ; toutes les bordures de Millésime
+     donnaient déjà leur couleur. */
+  *, ::before, ::after { border-color: var(--color-border); }
     body {
     background: var(--color-verre); color: var(--color-etiquette);
     font-family: var(--font-sans); font-size: 15px; line-height: 1.5;
@@ -67,6 +83,9 @@
   .millesime { font-family: var(--font-millesime); font-variant-numeric: lining-nums; letter-spacing: -0.02em; }
   /* Titre d'écran : grand et fin, comme dans carnet */
   .titre-page { font-size: 1.9rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1.15; }
+  /* 2.15.0 : titre et étiquette de l'écran « Connexion » commun (mêmes noms que dans le socle) */
+  .titre { font-size: 1.9rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1.15; }
+  .etiquette { font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-craie); }
   .surface { background: var(--color-verre-2); border: 1px solid var(--color-filet); border-radius: 12px; }
   .secondaire { color: var(--color-craie); }
   /* 2.2.0 : d'où vient une photo à dater. Trois origines, trois couleurs, et toujours le mot à côté. */

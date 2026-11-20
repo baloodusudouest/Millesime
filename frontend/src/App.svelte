@@ -11,7 +11,8 @@
   import Nommer from './pages/Nommer.svelte'
   import Verifier from './pages/Verifier.svelte'
   import Recues from './pages/Recues.svelte'
-  import Services from './pages/Services.svelte'
+  // 2.15.0 : écran « Connexion » commun (contrat 3, socle 0.11.0), copié du socle tel quel (empreinte testée)
+  import Services from './lib/services/Services.svelte'
   import Reglages from './pages/Reglages.svelte'
 
   const ONGLETS = [
@@ -50,6 +51,17 @@
     suivrePc(); if (s.connecte) compter()
   }).catch(() => (session.connecte = false))
   $effect(() => { if (session.connecte) compter() })
+
+  // 2.15.0 : le geste de la fiche Immich (seul geste des fiches « Connexion »). lectureSeule={false} ci-dessous :
+  // « Synchroniser » ne fait que lire Immich (il n'écrit que dans la base de Millésime) ; il restait permis en
+  // lecture seule dans l'ancien écran, et le reste.
+  async function geste(service, g) {
+    if (service.id === 'immich' && g.id === 'synchroniser') {
+      const b = await api.post('/api/synchroniser')
+      compter()
+      return `Relecture faite : ${b.scans} scan${b.scans > 1 ? 's' : ''} relus, ${b.visages} visage${b.visages > 1 ? 's' : ''}.`
+    }
+  }
 
   async function deconnecter() {
     await api.post('/api/deconnexion')
@@ -94,7 +106,7 @@
     {:else if page === 'nommer'}<Nommer cible={route.param} />
     {:else if page === 'verifier'}<Verifier />
     {:else if page === 'recues'}<Recues />
-    {:else if page === 'connexion'}<Services service={route.param} />
+    {:else if page === 'connexion'}<Services ongeste={geste} lectureSeule={false} ondeconnecte={() => (session.connecte = false)} />
     {:else if page === 'reglages'}<Reglages {deconnecter} />
     {:else}<ATraiter />{/if}
   </main>

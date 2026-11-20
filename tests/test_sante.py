@@ -24,7 +24,7 @@ def test_health_porte_la_sante_des_taches_et_la_copie(env):  # noqa: F811
     client, _ = env
     j = _sante(client)
     assert j["ok"] is True and "a_traiter" in j                                  # rien d'existant ne change
-    assert j["version_socle"] == "0.9.1"
+    assert j["version_socle"] == "0.11.0"
     taches = {t["nom"]: t for t in j["taches"]}
     assert {"synchro-immich", "lecture-sillage", "synchro-complete", "copie-des-bases"} <= set(taches)
     assert taches["synchro-immich"]["type"] == "reguliere" and taches["synchro-immich"]["periode_s"] >= 300

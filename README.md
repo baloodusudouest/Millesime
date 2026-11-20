@@ -14,7 +14,7 @@ Dater les photos papier numérisées à partir de l'âge des visages qu'elles co
 | À vérifier | Visages dont l'âge estimé contredit l'âge connu, signe d'un groupe mélangé ou d'une naissance fausse |
 | À traiter | Bilan (photos datées sur le total) et une tuile par file : À dater, Datables par le nom, À trancher, À nommer, À vérifier, Reçues des invités (2.13), Sans naissance, À calculer sur le PC |
 | Reçues des invités (2.13) | Les années que les invités proposent dans Sillage (« Pas la bonne année ? »), une ligne par photo : tous les avis (année, « environ », souvenir, prénoms), date actuelle dans Immich, estimation de Millésime, « date déjà changée depuis l'avis » ; Accepter (une année d'avis), Corriger, Écarter, Tout accepter (un seul avis à ±2 ans de l'estimation), Relire |
-| Connexion | Une tuile par service : Immich (relecture), Calculateur du PC (état, mode d'emploi), carnet |
+| Connexion | Écran commun des applis maison (2.15, contrat 3) : une tuile à voyant par service (Immich, Calculateur du PC, carnet, Home Assistant, Chambre noire), la fiche au toucher : ce qui est lu, ce qui est écrit, Vérifier ; Synchroniser sur Immich ; marche à suivre complète du calculateur du PC (état, allumer, pannes et commandes PowerShell, installation) |
 | Réglages | Précision de l'indice, lecture d'Immich (libellé, fréquence), sources et noms d'albums, libellés suivis, restaurer les réglages (sauvegarde de l'Anneau), journal de chaque écriture dans Immich avec Annuler, déconnexion |
 
 **Écriture à la validation** :
@@ -45,6 +45,7 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
       # Variables communes de la maison (module app/maison.py) ; depuis la 2.12, seules lues pour le mot de passe et le jeton
       - MAISON_PASSWORD=${MAISON_PASSWORD}         # mot de passe commun des applis (12 caractères au moins)
       - MAISON_JETON=${MAISON_JETON:-}             # jeton commun : carnet (porte /api/etat), Anneau (sauvegarde, annuaire), Transhumance, Chambre noire
+      - ANNEAU_CLE=${ANNEAU_CLE:-}                 # 2.15 : l'Anneau lit les fiches « Connexion » (/api/maison/services) ; vide = porte fermée
       - MAISON_LECTURE_SEULE=${MAISON_LECTURE_SEULE:-}   # « oui » : aucune appli n'écrit ; MILLESIME_LECTURE_SEULE l'emporte si posée
       - MILLESIME_LECTURE_SEULE=${MILLESIME_LECTURE_SEULE:-}   # « oui » ou « non » : force Millésime seul
       - MILLESIME_IMMICH_URL=http://immich_server:2283
@@ -68,6 +69,7 @@ Le modèle de stockage d'Immich range ensuite le fichier dans `Pellicule/AAAA/�
 |---|---|---|
 | `MAISON_PASSWORD` | — | Mot de passe commun des applis de la maison (12 caractères au moins) ; seul lu depuis la 2.12 |
 | `MAISON_JETON` | vide | Jeton commun des échanges entre applis maison : ouvre `GET /api/etat` (carnet) et `GET /externe/sauvegarde` (Anneau), part avec les demandes à Transhumance, à Chambre noire et à l'Anneau (annuaire, sauvegardes). Vide : ces portes sont fermées. Home Assistant et le PC gardent leurs jetons |
+| `ANNEAU_CLE` | vide | Clé de lecture de l'Anneau (contrat 3, 2.15) : n'ouvre que `GET /api/maison/services` et `POST /api/maison/services/{id}/verifier` (fiches « Connexion »). Vide : l'Anneau ne les lit pas |
 | `MAISON_JETON_ANCIEN` | vide | Accepté en plus pendant un changement de jeton commun |
 | `MAISON_LECTURE_SEULE` | vide | `oui` : aucune appli de la maison n'écrit ; `MILLESIME_LECTURE_SEULE` (`oui`/`non`) l'emporte pour Millésime |
 | `MAISON_ANNEAU_URL` | `http://anneau:8094` | Adresse de l'Anneau dans la stack (annuaire des adresses, sauvegardes des réglages) |

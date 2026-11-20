@@ -244,7 +244,21 @@ def etat_pc():
 def synchroniser():
     """Le bouton « Synchroniser » relit tout (2.4.0) ; la synchro de chaque heure est légère."""
     with maison.TACHES.tour(TACHE_SYNCHRO_COMPLETE):     # 2.14.0 : suivi dans /health (tâche à la demande)
-        return m().synchroniser(complete=True)
+        try:
+            bilan = m().synchroniser(complete=True)
+        except ErreurImmich as e:
+            SERVICES.noter("immich", False, maison.message_erreur(e))   # 2.15.0 : le geste sert d'essai
+            raise
+    # 2.15.0 : le geste « Synchroniser » de la fiche Immich a joint Immich (et relu Chambre noire si elle est reliée)
+    SERVICES.noter("immich", True, f"Relu : {bilan.get('scans', 0)} scans, {bilan.get('visages', 0)} visages.")
+    cn = m().etat_chambre_noire()
+    if cn["relie"]:
+        if cn.get("erreur"):
+            SERVICES.noter("chambre-noire", False, cn["erreur"].get("detail"))
+        elif cn.get("noms"):
+            SERVICES.noter("chambre-noire", True, f"Tag des non datées : {cn['noms'].get('tag_non_datee')} ; "
+                                                  f"album : {cn['noms'].get('album_non_datees')}.")
+    return bilan
 
 
 @app.post("/api/datables/dater")
@@ -594,6 +608,335 @@ def ha_etat():
     """Home Assistant (package systeme/millesime.yaml) : nombres et état du PC, aucun nom."""
     m().base.ecrire("ha_vu", {"le": time.strftime("%Y-%m-%dT%H:%M:%S")})
     return m().etat_ha()
+
+
+# ================================================================ fiches « Connexion » (2.15.0, contrat 3, socle 0.11.0)
+# GET /api/maison/services et POST /api/maison/services/{id}/verifier (session ou ANNEAU_CLE) : écran commun
+# lib/services/Services.svelte, et fiche « État » de l'Anneau. Textes « lu » et « écrit » repris de l'ancien écran
+# (pages/Services.svelte et pages/Calcul.svelte jusqu'à la 2.14.0). Essais légers, rien n'est écrit nulle part :
+# Immich lit sa version, Chambre noire ses noms ; carnet, Home Assistant et le calculateur du PC sont des visiteurs :
+# leur essai relit seulement la date de leur dernier passage, gardée par Millésime (le PC n'est jamais réveillé).
+
+def _il_y_a(iso: str | None) -> str:
+    """« il y a 4 min », « il y a 3 h », « il y a 2 jours » (date locale ISO, comme dans la base)."""
+    if not iso:
+        return ""
+    try:
+        s = max(0.0, (datetime.now() - datetime.fromisoformat(iso)).total_seconds())
+    except ValueError:
+        return ""
+    if s < 60:
+        return "à l'instant"
+    if s < 3600:
+        return f"il y a {round(s / 60)} min"
+    if s < 86400:
+        return f"il y a {round(s / 3600)} h"
+    j = round(s / 86400)
+    return f"il y a {j} jour{'s' if j > 1 else ''}"
+
+
+def _date_courte(iso: str | None) -> str:
+    """« 20/11 à 14:02 » (date locale ISO)."""
+    try:
+        return datetime.fromisoformat(iso).strftime("%d/%m à %H:%M") if iso else "—"
+    except ValueError:
+        return str(iso)
+
+
+def _visiteur_recent(cle: str, heures: float) -> bool:
+    """Ancien écran : un lecteur (carnet, Home Assistant) est « branché » s'il est venu lire dans les dernières heures."""
+    le = (m().base.lire(cle) or {}).get("le")
+    try:
+        return bool(le) and (datetime.now() - datetime.fromisoformat(le)).total_seconds() < heures * 3600
+    except ValueError:
+        return False
+
+
+def _essai_immich():
+    """Lecture courte de la version d'Immich (une seule demande, 5 s au plus, sans les nouvelles tentatives du client),
+    plus la dernière relecture gardée par Millésime."""
+    import requests
+    cfg = m().cfg
+    r = requests.get(f"{cfg.immich_url}/api/server/version", headers={"x-api-key": cfg.immich_cle,
+                     "Accept": "application/json"}, timeout=5)
+    if r.status_code >= 400:
+        return False, f"Immich a répondu {r.status_code}."
+    v = r.json() or {}
+    s = m().base.lire("derniere_synchro")
+    relu = (f" Dernière relecture : {_date_courte(s.get('le'))}, {s.get('scans', 0)} scan{'s' if s.get('scans', 0) > 1 else ''} relus."
+            if s else " Jamais relu.")
+    return True, f"Immich {v.get('major')}.{v.get('minor')}.{v.get('patch')}.{relu}"
+
+
+def _derniere_ecriture_immich() -> str | None:
+    """Dernière ligne du journal qui a écrit dans Immich (les lignes de réglage n'y écrivent rien)."""
+    from .service import ACTIONS_REGLAGES
+    marques = ",".join("?" * len(ACTIONS_REGLAGES))
+    r = m().base.un(f"SELECT MAX(le) AS fait, MAX(annule_le) AS annule FROM journal WHERE action NOT IN ({marques})",
+                    *ACTIONS_REGLAGES) or {}
+    dates = [d for d in (r.get("fait"), r.get("annule")) if d]      # une annulation écrit aussi dans Immich
+    if not dates:
+        return None
+    try:
+        return datetime.fromisoformat(max(dates)).astimezone().isoformat(timespec="seconds")
+    except ValueError:
+        return None
+
+
+# --- calculateur du PC : état lu dans la base (jamais d'appel au PC), textes de l'ancien écran (EtatPC, Calcul)
+TITRES_PC = {
+    "en_cours": "Calcul en cours sur le PC",
+    "en_attente": "PC disponible, calcul imminent",
+    "disponible": "PC disponible",
+    "indisponible": "PC non disponible",
+    "jamais_vu": "Calculateur jamais lancé",
+}
+
+
+def _phrase_pc(pc: dict) -> str:
+    """La phrase sous l'état du PC, mot pour mot celle de l'ancien écran (components/EtatPC.svelte)."""
+    e, n = pc["etat"], pc.get("restants", 0)
+    if e == "en_cours":
+        reste = pc.get("reste_min")
+        temps = ("estimation du temps restant…" if reste is None else "moins d’une minute" if reste < 1
+                 else f"encore ~{reste} min")
+        return f"{pc['fait']} / {pc['total']} visages · {pc['pourcentage']} % · {temps}"
+    if e == "en_attente":
+        return f"{n} visage{'s' if n > 1 else ''} en attente : le PC les prend à son prochain passage (moins de 5 min)."
+    if e == "disponible":
+        return ("Rien à calculer. Le PC revérifie toutes les 5 min et Millésime relit Immich au passage "
+                f"(dernier contact il y a {pc['il_y_a_min']} min).")
+    if e == "indisponible":
+        attente = (f"{n} visage{'s' if n > 1 else ''} attendent : allume" if n else "Pour le prochain calcul, allume")
+        return f"Dernier contact {_date_courte(pc.get('le'))}. {attente} le PC et ouvre Docker Desktop."
+    return "Voir « Installation (une seule fois) » ci-dessous."
+
+
+def _titre_pc(pc: dict) -> str:
+    return TITRES_PC.get(pc["etat"], "") + (f" ({pc['machine']})" if pc.get("machine") else "")
+
+
+def _essai_pc():
+    """Relit seulement le dernier contact du calculateur, noté par Millésime quand le PC demande du travail
+    (/api/calcul/taches). Aucun appel au PC : un PC éteint ou en veille « ne répond pas »."""
+    pc = m().etat_pc()
+    actif = pc["etat"] in ("en_cours", "en_attente", "disponible")
+    if pc["etat"] == "indisponible":
+        return False, (f"{_titre_pc(pc)} : dernier contact {_il_y_a(pc.get('le'))} "
+                       "(PC éteint ou en veille, ou Docker Desktop fermé).")
+    if pc["etat"] == "jamais_vu":
+        return False, "Calculateur jamais lancé : voir « Installation (une seule fois) »."
+    return actif, f"{_titre_pc(pc)}, dernier contact {_il_y_a(pc.get('le'))}."
+
+
+DEPOT_CALCUL = "https://raw.githubusercontent.com/baloodusudouest/Millesime/main/pc/calcul.yml"
+
+
+def _guide_pc() -> dict:
+    """Marche à suivre du calculateur du PC, au format de la fiche « IA du PC » de Gazette : réglages lus (dont l'état
+    du PC, relu à chaque ouverture de la fiche), allumer normalement, pannes connues avec leurs commandes PowerShell,
+    installation (une seule fois). Rien de secret : le jeton n'est jamais montré."""
+    mm = m()
+    pc = mm.etat_pc()
+    t = mm.compter_taches()
+    total = t["calibrage"] + t["a_dater"]
+    dernier = mm.base.lire("dernier_calcul") or {}
+    reglages = [
+        {"nom": "État du PC", "valeur": _titre_pc(pc)},
+        {"nom": "En ce moment", "valeur": _phrase_pc(pc)},
+        {"nom": "Visages en attente",
+         "valeur": (f"{total} ({t['calibrage']} pour le calibrage, {t['a_dater']} pour dater). Compte environ "
+                    f"{max(1, round(total * 3 / 60))} min." if total else "Aucun visage en attente : rien à lancer.")},
+        {"nom": "Dernier calcul", "valeur": _date_courte(dernier.get("fin") or dernier.get("le")) if dernier else "aucun"},
+        {"nom": "Jeton du calculateur",
+         "valeur": "réglé (MILLESIME_JETON_CALCUL, même valeur dans le .env du PC)" if mm.cfg.jeton_calcul
+         else "pas réglé : MILLESIME_JETON_CALCUL est vide dans la stack, le PC est refusé"},
+        {"nom": "Passage du PC", "valeur": "toutes les 5 minutes tant que Docker Desktop est ouvert (VEILLE_MINUTES dans le .env du PC)"},
+        {"nom": "PC non disponible", "valeur": f"après {mm.PC_ACTIF_MINUTES} minutes sans contact"},
+        {"nom": "Relecture d'Immich", "valeur": f"au passage du PC quand il n'y a rien à calculer, au plus toutes les "
+                                                f"{mm.VEILLE_SYNCHRO_MINUTES} minutes"},
+    ]
+    dossier = "cd C:\\millesime"
+    journal = "docker compose -f calcul.yml logs --tail 30"
+    return {
+        "reglages": reglages,
+        "allumer": [
+            "Allumer le PC (ou le sortir de veille).",
+            "Ouvrir Docker Desktop (menu Démarrer) et attendre qu'il ait fini de démarrer.",
+            "Le calculateur repart tout seul : Docker Desktop relance le conteneur millesime_calcul à chaque ouverture. "
+            "Dans Docker Desktop, ce conteneur montre ce qu'il fait (onglet Logs). S'il n'est pas en marche : dans "
+            "C:\\millesime, « docker compose -f calcul.yml up -d ».",
+            "Dans les 5 minutes, le PC passe demander du travail. Ici, « Vérifier » dit alors « PC disponible » "
+            "(Vérifier relit seulement le dernier contact noté par Millésime : il ne réveille jamais le PC).",
+            "Des visages attendent : le calcul démarre seul (MiVOLO est chargé au premier visage) et l'avancement "
+            "s'affiche en haut de Millésime (« PC 40 % »).",
+            "En fin de calcul : rien à faire. On peut éteindre le PC ; Millésime le dit « non disponible » "
+            f"{mm.PC_ACTIF_MINUTES} minutes après le dernier contact.",
+        ],
+        "pannes": [
+            {"signe": "« PC non disponible » alors que le PC est allumé",
+             "faire": ["Docker Desktop est-il ouvert et démarré ? Fermé, le calculateur ne tourne pas.",
+                       "Le conteneur doit être en marche : la première commande montre une ligne millesime_calcul "
+                       "avec « Up ». Rien : le relancer (deuxième commande).",
+                       "Il redemande du travail toutes les 5 minutes : attendre 5 minutes, puis Vérifier."],
+             "commandes": ["docker ps --filter name=millesime_calcul", f"{dossier}; docker compose -f calcul.yml up -d"]},
+            {"signe": "Le PC s'est mis en veille pendant un calcul",
+             "faire": ["En veille, le PC ne passe plus : Millésime le dit « non disponible » "
+                       f"{mm.PC_ACTIF_MINUTES} minutes après le dernier contact.",
+                       "Le sortir de veille : Docker Desktop reprend et le calculateur repasse dans les 5 minutes. "
+                       "Un calcul interrompu reprend où il en était (les visages déjà calculés sont gardés).",
+                       "Pour un long calcul : désactiver la mise en veille dans Paramètres Windows › Système › "
+                       "Alimentation, le temps du calcul."],
+             "commandes": []},
+            {"signe": "Le conteneur s'arrête ou redémarre sans cesse",
+             "faire": ["La fin de son journal dit pourquoi (commande ci-dessous).",
+                       "« ❌ Jeton refusé » ou « MILLESIME_JETON_CALCUL manquant dans .env » : voir la panne du jeton.",
+                       "Une autre erreur : la noter et la recopier dans le dépôt de Millésime."],
+             "commandes": [f"{dossier}; {journal}"]},
+            {"signe": "« Jeton refusé : vérifie MILLESIME_JETON_CALCUL dans .env »",
+             "faire": ["Le jeton du .env du PC doit être exactement la valeur de MILLESIME_JETON_CALCUL de la stack homelab "
+                       "(Portainer). L'écrire dans C:\\millesime\\.env, sans espace ni guillemets.",
+                       "Puis relancer le calculateur pour qu'il relise le .env (commande ci-dessous).",
+                       "La ligne « Jeton du calculateur » ci-dessus dit si le jeton est réglé côté Millésime."],
+             "commandes": [f"{dossier}; docker compose -f calcul.yml up -d"]},
+            {"signe": "« Millésime injoignable à … : vérifie MILLESIME_URL et que le NAS est allumé »",
+             "faire": ["Le journal du calculateur l'écrit, puis réessaie toutes les 5 minutes.",
+                       "MILLESIME_URL (dans le .env) doit être l'adresse de Millésime vue depuis le PC : adresse locale du NAS "
+                       "ou son nom Tailscale, port 8098. La première commande montre celle que le calculateur lit.",
+                       "Par Tailscale : Tailscale doit être connecté sur le PC (deuxième commande). Puis tester le port "
+                       "(troisième commande, en remplaçant l'adresse) : « TcpTestSucceeded : True » attendu.",
+                       "Adresse corrigée dans le .env : relancer le calculateur (« docker compose -f calcul.yml up -d »)."],
+             "commandes": ["Select-String -Path C:\\millesime\\.env -Pattern MILLESIME_URL", "tailscale status",
+                           "Test-NetConnection <adresse du NAS> -Port 8098"]},
+            {"signe": "Calcul lent, la carte graphique ne travaille pas",
+             "faire": ["C'est normal : l'image du calculateur est construite pour le processeur (PyTorch « cpu ») ; "
+                       "la carte graphique n'est jamais utilisée. Le journal dit « MiVOLO prêt sur cpu ».",
+                       "Compter environ 3 secondes par visage. THREADS=auto (tous les cœurs) par défaut."],
+             "commandes": [f"{dossier}; docker compose -f calcul.yml logs | Select-String \"MiVOLO prêt\""]},
+            {"signe": "Premier lancement : « Chargement de MiVOLO… » très long",
+             "faire": ["Au premier visage, le modèle MiVOLO est téléchargé une fois depuis Hugging Face dans "
+                       "C:\\millesime\\data : il faut Internet sur le PC.",
+                       "Le journal écrit un avertissement si MIVOLO_REVISION est vide (dernière version du modèle chargée) : "
+                       "sans gravité, l'empreinte à poser n'est pas encore choisie."],
+             "commandes": [f"{dossier}; {journal}"]},
+            {"signe": "Arrêter, mettre à jour ou faire une seule passe",
+             "faire": ["Arrêter le calculateur (première commande).",
+                       "Mettre à jour le calculateur (deuxième commande : télécharge la dernière version).",
+                       "Une seule passe puis arrêt, sans veille (troisième commande)."],
+             "commandes": [f"{dossier}; docker compose -f calcul.yml down",
+                           f"{dossier}; docker compose -f calcul.yml up -d",
+                           f"{dossier}; docker compose -f calcul.yml run --rm -e VEILLE=0 millesime-calcul"]},
+        ],
+        "une_fois": [
+            {"texte": "Installer Docker Desktop (installation pour l'utilisateur, WSL 2) et le lancer.", "commande": ""},
+            {"texte": "Créer le dossier C:\\millesime et s'y placer :",
+             "commande": "New-Item -ItemType Directory -Force C:\\millesime; cd C:\\millesime"},
+            {"texte": "Télécharger le fichier du calculateur :", "commande": f"curl.exe -L -o calcul.yml {DEPOT_CALCUL}"},
+            {"texte": "Dans le dossier C:\\millesime, ajouter ces deux lignes au fichier .env (MILLESIME_URL : l'adresse de "
+                      "Millésime sur le NAS, réseau local ou Tailscale, port 8098 ; le jeton : la valeur de la stack homelab) :",
+             "commande": "MILLESIME_URL=http://<adresse du NAS>:8098\n"
+                         "MILLESIME_JETON_CALCUL=…   (la valeur de la stack homelab)"},
+            {"texte": "Le démarrer (le conteneur millesime_calcul apparaît dans Docker Desktop) :",
+             "commande": "docker compose -f calcul.yml up -d"},
+            {"texte": "Dans les 5 minutes, cette fiche dit « PC disponible » (Vérifier).", "commande": ""},
+        ],
+        "terminal": "Les commandes se tapent dans PowerShell sur le PC (ou le terminal de Docker Desktop).",
+        "note": "L'âge des visages est estimé par MiVOLO sur ton PC : le NAS est trop lent pour ce modèle. Tant que Docker "
+                "Desktop est ouvert, le calculateur demande du travail à Millésime toutes les 5 minutes et calcule dès qu'un "
+                "visage attend. Quand il n'y a rien à faire, Millésime en profite pour relire Immich (au plus toutes les "
+                "15 minutes). Rien n'est écrit dans Immich pendant le calcul.",
+    }
+
+
+def _essai_carnet():
+    """carnet vient lire /api/etat : l'essai relit la date de son dernier passage (Millésime n'appelle pas carnet)."""
+    le = (m().base.lire("carnet_vu") or {}).get("le")
+    n = len(m().sans_naissance())
+    manque = f" {n} personne{'s' if n > 1 else ''} des scans sans date de naissance." if n else ""
+    if not le:
+        return False, "carnet n'est encore jamais venu lire." + manque
+    return _visiteur_recent("carnet_vu", 48), f"Dernière lecture : {_date_courte(le)}." + manque
+
+
+def _essai_ha():
+    """Home Assistant vient lire /ha/etat : l'essai relit la date de son dernier passage."""
+    le = (m().base.lire("ha_vu") or {}).get("le")
+    if not le:
+        return False, "Home Assistant n'est encore jamais venu lire (package systeme/millesime.yaml)."
+    return _visiteur_recent("ha_vu", 2), f"Dernière lecture : {_date_courte(le)}."
+
+
+def _essai_chambre_noire():
+    """Lecture courte des noms chez Chambre noire (/externe/noms, jeton commun), sans les garder : la relecture
+    d'Immich (Synchroniser) reste seule à les mettre en usage."""
+    import requests
+    cfg = m().cfg
+    r = requests.get(cfg.chambre_noire_url + "/externe/noms", timeout=5,
+                     headers={"Authorization": f"Bearer {cfg.jeton_chambre_noire}"})
+    if r.status_code == 404:
+        return False, "Chambre noire a répondu 404 (adresse fermée : MAISON_JETON vide chez elle)."
+    if r.status_code == 401:
+        return False, "Chambre noire a répondu 401 (jeton refusé)."
+    if r.status_code != 200:
+        return False, f"Chambre noire a répondu {r.status_code}."
+    j = r.json()
+    if not j.get("regle"):
+        return True, "Le libellé n'est pas encore réglé dans Chambre noire (Réglages › Noms dans Immich)."
+    return True, f"Tag des non datées : {j.get('tag_non_datee')} ; album : {j.get('album_non_datees')}."
+
+
+SERVICES = maison.Services(APPLI)
+SERVICES.ajouter(
+    "immich", "Immich",
+    lit="Millésime lit dans Immich les scans, les visages et les dates de naissance. La relecture se refait toute seule "
+        "(fréquence dans Réglages › Lecture d'Immich, chaque heure par défaut), et toutes les 15 min quand le PC est "
+        "disponible.",
+    ecrit="Il n'y écrit qu'à ta demande : la date, un tag et l'album d'une photo validée, le nom d'un groupe de visages, "
+          "une fusion. Chaque écriture est dans le journal (Réglages) et peut s'annuler.",
+    regle=lambda: bool(m().cfg.immich_url and m().cfg.immich_cle),
+    reglage="MILLESIME_IMMICH_URL et MILLESIME_IMMICH_CLE",
+    essai=_essai_immich,
+    geste={"id": "synchroniser", "nom": "Synchroniser maintenant"},
+    derniere_ecriture=_derniere_ecriture_immich)
+SERVICES.ajouter(
+    "pc-calcul", "Calculateur du PC",
+    lit="Les âges estimés par MiVOLO, visage par visage, que le calculateur du PC renvoie, et son passage toutes les "
+        "5 minutes (nom du PC, dernier contact).",
+    ecrit="Rien sur le PC : il vient lui-même chercher les visages à analyser et leurs aperçus, que Millésime lit dans "
+          "Immich pour lui (la clé Immich reste sur le NAS).",
+    regle=lambda: bool(m().cfg.jeton_calcul),
+    reglage="MILLESIME_JETON_CALCUL",
+    essai=_essai_pc,
+    guide=_guide_pc)
+SERVICES.ajouter(
+    "carnet", "carnet", genre="maison", cible="carnet",
+    lit="carnet vient lire l'état de Millésime (photos à dater, calcul en attente) avec un jeton, pour te rappeler "
+        "d'allumer le PC.",
+    ecrit="Millésime n'écrit rien dans carnet. Les dates de naissance qui manquent se complètent dans carnet, qui les "
+          "envoie à Immich.",
+    regle=lambda: bool(maison.jetons()),
+    reglage="MAISON_JETON",
+    essai=_essai_carnet)
+SERVICES.ajouter(
+    "home-assistant", "Home Assistant",
+    lit="Home Assistant lit toutes les 10 minutes les nombres de Millésime (photos à dater, à trancher, visages à "
+        "analyser) et l'état du PC, jamais un nom. Quand au moins 20 visages attendent depuis une heure et que le PC est "
+        "éteint, il te rappelle de l'allumer.",
+    ecrit="Millésime n'écrit rien dans Home Assistant.",
+    regle=lambda: bool(m().cfg.jeton_ha),
+    reglage="MILLESIME_JETON_HA",
+    essai=_essai_ha)
+SERVICES.ajouter(
+    "chambre-noire", "Chambre noire", genre="maison", cible="chambre-noire",
+    lit="Chambre noire envoie les photos numérisées dans Immich. À chaque relecture d'Immich, Millésime y lit le libellé, "
+        "le tag et l'album des non datées réglés dans ses Réglages, et les suit. Non reliée, les noms viennent des "
+        "Réglages de Millésime.",
+    ecrit="Millésime n'écrit rien dans Chambre noire.",
+    regle=lambda: bool(m().cfg.jeton_chambre_noire),
+    reglage="MAISON_JETON",
+    essai=_essai_chambre_noire)
+# Monté APRÈS la garde : le dernier middleware ajouté passe en premier.
+maison.monter_services(app, SERVICES, lambda r: "sessions" in ETAT and ETAT["sessions"].connecte(r.cookies))
 
 
 # -- interface -------------------------------------------------------------------

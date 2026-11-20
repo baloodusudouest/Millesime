@@ -117,18 +117,30 @@ def test_20_a_traiter_en_tuiles(page):
 
 
 def test_20_connexion_par_service_et_reglages(page):
+    """2.15.0 : écran « Connexion » commun (contrat 3) : cinq tuiles à voyant, la fiche s'ouvre au toucher."""
     aller(page, "Connexion")
-    services = page.locator("nav[aria-label='Services'] .tuile")
+    services = page.locator("ul[aria-label='Services'] button[aria-expanded]")
     services.first.wait_for()
-    assert services.locator(".nom-tuile").all_inner_texts() == ["Immich", "Calculateur du PC", "carnet", "Home Assistant", "Chambre noire"]
+    noms = [n.split("\n")[0].strip() for n in services.all_inner_texts()]
+    assert noms == ["Immich", "Calculateur du PC", "carnet", "Home Assistant", "Chambre noire"]
     services.filter(has_text="Home Assistant").click()
-    page.get_by_role("region", name="Home Assistant").wait_for()
+    fiche = page.locator("#fiche-ouverte")
+    fiche.get_by_role("heading", name="Home Assistant").wait_for()
+    assert "Ce qui est lu" in fiche.inner_text() and "jamais un nom" in fiche.inner_text()
     services.filter(has_text="Immich").click()
-    page.get_by_role("button", name="Synchroniser maintenant").click()
-    page.get_by_role("button", name="Synchroniser maintenant").wait_for()              # revenu après la synchronisation
-    assert "Dernière relecture" in page.locator("section[aria-label='Immich']").inner_text()
+    fiche.get_by_role("heading", name="Immich").wait_for()
+    fiche.get_by_role("button", name="Synchroniser maintenant").click()
+    fiche.get_by_role("status").filter(has_text="Relecture faite").wait_for()   # revenu après la synchronisation
+    fiche.get_by_role("button", name="Vérifier").click()
+    fiche.get_by_text(re.compile(r"Vérifié (à l.instant|il y a)")).first.wait_for()
     services.filter(has_text="Calculateur du PC").click()
-    page.locator("section[aria-label='Calculateur du PC']").wait_for()
+    fiche.get_by_role("heading", name="Calculateur du PC").wait_for()
+    texte = fiche.inner_text()
+    for attendu in ("Allumer normalement", "En cas de problème", "Installation (une seule fois)", "MiVOLO sur ton PC"):
+        assert attendu in texte, attendu
+    fiche.get_by_text("« PC non disponible » alors que le PC est allumé").click()
+    fiche.get_by_text("docker ps --filter name=millesime_calcul").wait_for()
+    assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
     aller(page, "Réglages")
     page.get_by_role("heading", name="Journal").wait_for()
     assert page.get_by_role("heading", name="Précision de l'indice").count() == 1
